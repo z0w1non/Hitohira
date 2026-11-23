@@ -1,0 +1,3024 @@
+<!DOCTYPE html>
+<!--
+MIT License
+
+Copyright (c) 2025 Nozomi
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->
+<html lang="ja" data-theme="light" data-writing-mode="horizontal">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hitohira</title>
+<style>
+  
+  :root {
+    --font-sans: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    --font-serif: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", Georgia, serif;
+
+    --reader-font: var(--font-serif);
+    --font-size: 16px;
+    --line-height: 2.0;
+    --letter-spacing: 0.04em;
+    --ruby-scale: 0.50;
+    --panel-bg-alpha: 0.75;
+    --content-width: 720px;
+    --content-padding: 3rem;
+    --background-blur: 12px;
+
+    --bg-image: none;
+    --bg-pos-x: calc(50% + 0px);
+    --bg-pos-y: calc(50% + 0px);
+
+  }
+
+  html[data-theme="light"] {
+    --bg-main: #f7f7f7;
+    --bg-panel: #ffffff;
+    --bg-hover: #e5e5e5;
+    --panel-rgb: 255, 255, 255;
+    --narration-color: #1c1c1c;
+    --dialogue-color: #595959;
+    --text-primary: #1c1c1c;
+    --text-secondary: #595959;
+    --text-muted: #949494;
+    --border-color: #dcdcdc;
+    --segment-bg: #e8e8e8;
+    --segment-border: #c8c8c8;
+    --segment-active-bg: #333333;
+    --segment-active-text: #ffffff;
+    --segment-hover-text: #1c1c1c;
+  }
+
+  html[data-theme="dark"] {
+    --bg-main: #0a0a0a;
+    --bg-panel: #121212;
+    --bg-hover: #1f1f1f;
+    --panel-rgb: 0, 0, 0;
+    --narration-color: #e3e3e3;
+    --dialogue-color: #b8b8b8;
+    --text-primary: #e3e3e3;
+    --text-secondary: #a3a3a3;
+    --text-muted: #666666;
+    --border-color: #262626;
+    --segment-bg: #303030;
+    --segment-border: #555555;
+    --segment-active-bg: #e0e0e0;
+    --segment-active-text: #111111;
+    --segment-hover-text: #ffffff;
+  }
+
+  :root {
+    --accent-status: var(--segment-active-bg);
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg-color, var(--bg-main));
+    background-image: var(--bg-image);
+    background-size: cover;
+    background-position: var(--bg-pos-x) var(--bg-pos-y);
+    background-attachment: fixed;
+    color: var(--narration-color);
+    font-family: var(--font-sans);
+    overflow: hidden;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #background-video {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+    z-index: 0;
+    pointer-events: none;
+    display: none;
+  }
+  body.video-bg #background-video { display: block; }
+  #viewer-container, .drawer-panel, #bg-viewport-indicator { position: relative; z-index: 1; }
+
+  body.has-bg {
+    cursor: grab;
+  }
+  body.has-bg:active {
+    cursor: grabbing;
+  }
+
+  body.drag-over {
+    outline: 4px dashed var(--accent-status);
+    outline-offset: -8px;
+  }
+
+  #viewer-container {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scroll-behavior: auto;
+    padding: 6vh 4vw 12vh;
+  }
+
+  html[data-writing-mode="vertical"] #viewer-container {
+    writing-mode: vertical-rl;
+    text-orientation: upright;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6vh 6vw 6vh 8vw;
+    scroll-behavior: auto;
+  }
+
+  html[data-writing-mode="vertical"] .ellipsis {
+    display: inline-block;
+    text-orientation: upright;
+  }
+
+  #novel-content {
+    font-family: var(--reader-font);
+    font-size: var(--font-size);
+    line-height: var(--line-height);
+    letter-spacing: var(--letter-spacing);
+    color: var(--narration-color);
+    margin: 0 auto;
+    width: var(--content-width);
+    max-width: 100%;
+    word-break: break-word;
+    background-color: rgba(var(--panel-rgb), var(--panel-bg-alpha));
+    backdrop-filter: blur(var(--background-blur));
+    -webkit-backdrop-filter: blur(var(--background-blur));
+    padding: var(--content-padding);
+    border-radius: 8px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+    transition: background-color 0.2s ease;
+    cursor: default;
+  }
+
+  #viewer-container.text-hit,
+  #viewer-container.text-hit #novel-content {
+    cursor: text;
+  }
+
+  html[data-writing-mode="vertical"] #novel-content {
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+    height: var(--content-width);
+    max-height: 100%;
+    margin: auto 0;
+  }
+
+  #novel-content p {
+    margin-bottom: 1.2em;
+    text-indent: 1em;
+  }
+
+  #novel-content p:has(> .dialogue:first-child) {
+    text-indent: 0;
+  }
+
+  html[data-writing-mode="vertical"] #novel-content p {
+    margin-bottom: 0;
+    margin-left: 1.2em;
+  }
+
+  .dialogue {
+    color: var(--dialogue-color);
+  }
+
+  #novel-content h1,
+  #novel-content h2,
+  #novel-content h3,
+  #novel-content h4,
+  #novel-content h5,
+  #novel-content h6 {
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 2.2em 0 1.1em;
+    letter-spacing: 0.06em;
+  }
+
+  html[data-writing-mode="vertical"] #novel-content h1,
+  html[data-writing-mode="vertical"] #novel-content h2,
+  html[data-writing-mode="vertical"] #novel-content h3,
+  html[data-writing-mode="vertical"] #novel-content h4,
+  html[data-writing-mode="vertical"] #novel-content h5,
+  html[data-writing-mode="vertical"] #novel-content h6 {
+    margin: 0 1.4em 0 2.2em;
+  }
+
+  #novel-content img {
+    max-width: 100%;
+    max-height: 75vh;
+    display: block;
+    margin: 1.5em auto;
+    border-radius: 4px;
+  }
+
+  #novel-content ruby {
+    ruby-align: center;
+  }
+  #novel-content table {
+    width: 100%;
+    margin: 1.2em 0;
+    border-collapse: collapse;
+    font-size: 0.95em;
+  }
+  #novel-content th,
+  #novel-content td {
+    border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+    padding: 0.45em 0.65em;
+    text-align: start;
+    vertical-align: top;
+  }
+  #novel-content th {
+    font-weight: 700;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+  }
+  #novel-content ul,
+  #novel-content ol {
+    margin: 1em 0;
+    padding-inline-start: 1.8em;
+  }
+  #novel-content li { margin: 0.35em 0; }
+  #novel-content blockquote {
+    margin: 1em 0;
+    padding: 0.5em 1em;
+    border-inline-start: 3px solid currentColor;
+    opacity: 0.85;
+  }
+  #novel-content pre {
+    overflow: auto;
+    margin: 1em 0;
+    padding: 0.8em 1em;
+    border-radius: 6px;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    white-space: pre-wrap;
+  }
+  #novel-content code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+  #novel-content a { color: inherit; text-decoration: underline; }
+
+  #novel-content rt {
+    font-size: calc(var(--font-size) * var(--ruby-scale));
+    line-height: 1;
+    color: var(--text-secondary);
+    user-select: none;
+  }
+
+  #progress-indicator {
+    position: fixed;
+    left: 20px;
+    bottom: 16px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    pointer-events: none;
+    user-select: none;
+    z-index: 20;
+    transition: opacity 0.2s ease, color 0.2s ease;
+  }
+
+  #progress-indicator.is-hidden {
+    opacity: 0;
+  }
+
+  .icon-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-primary);
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .icon-btn:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .icon-btn svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .icon-btn > svg {
+    display: block;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    color: currentColor;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  #btn-open-settings {
+    position: fixed;
+    top: 16px;
+    right: 20px;
+    z-index: 30;
+    background-color: var(--bg-panel);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+
+  .drawer-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 320px;
+    max-width: 88vw;
+    height: 100%;
+    
+    background-color: var(--bg-panel);
+    color: var(--text-primary);
+    border-left: 1px solid var(--border-color);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    visibility: hidden;
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
+    transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), visibility 0.24s, background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .drawer-panel.is-open {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  .drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+  }
+
+  .drawer-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--text-primary);
+  }
+
+  .drawer-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  #shortcut-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    color: var(--text-primary);
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 0;
+    max-width: min(92vw, 560px);
+    width: 100%;
+  }
+  #shortcut-modal::backdrop { background: rgb(0 0 0 / 45%); }
+  .shortcut-modal-body { padding: 20px; }
+  .shortcut-modal-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+  .shortcut-modal-title { font-weight: 700; font-size: 1.1rem; }
+  .shortcut-table { width: 100%; border-collapse: collapse; }
+  .shortcut-table th, .shortcut-table td { padding: 9px 8px; border-bottom: 1px solid var(--border-color); text-align: left; }
+  .shortcut-table th { font-weight: 600; }
+
+  .drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .drawer-footer {
+    padding: 14px 16px;
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .control-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: var(--text-primary);
+  }
+
+  .control-value {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+
+  .segmented-control {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    background-color: var(--segment-bg);
+    border: 1px solid var(--segment-border);
+    border-radius: 6px;
+    padding: 2px;
+  }
+
+  .segmented-control button {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .segmented-control button:hover {
+    color: var(--segment-hover-text);
+  }
+
+  .segmented-control button.is-active {
+    background-color: var(--segment-active-bg);
+    color: var(--segment-active-text);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  }
+
+  input[type="range"] {
+    width: 100%;
+    accent-color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .color-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-primary);
+  }
+
+  .color-row input[type="color"] {
+    border: 1px solid var(--border-color);
+    width: 36px;
+    height: 24px;
+    background: var(--bg-main);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  .switch {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    display: inline-block;
+  }
+
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .slider {
+    position: absolute;
+    inset: 0;
+    background-color: var(--bg-hover);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    transition: 0.2s;
+  }
+
+  .slider::before {
+    content: "";
+    position: absolute;
+    height: 14px;
+    width: 14px;
+    left: 2px;
+    bottom: 2px;
+    background-color: var(--text-secondary);
+    border-radius: 50%;
+    transition: 0.2s;
+  }
+
+  .switch input:checked + .slider {
+    background-color: var(--accent-status);
+    border-color: var(--accent-status);
+  }
+
+  .switch input:checked + .slider::before {
+    transform: translateX(16px);
+    background-color: #ffffff;
+  }
+
+  .action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 9px;
+    width: 100%;
+    padding: 9px 12px;
+    font-size: 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 0.15s ease, opacity 0.15s ease;
+  }
+
+  .action-btn-label { flex: 1 1 auto; text-align: left; }
+  .action-btn-icon {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    color: currentColor;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .action-btn:hover {
+    opacity: 0.85;
+  }
+
+  .action-btn-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    width: 100%;
+  }
+  .file-action-group { display: flex; align-items: center; gap: 6px; width: 100%; }
+  .file-action-label { flex: 1 1 auto; min-width: 0; text-align: left; font-size: 12px; color: var(--text-primary); }
+  .file-icon-btn { width: 38px; flex: 0 0 38px; justify-content: center; padding-inline: 8px; }
+  .file-delete-btn { width: 38px; flex: 0 0 38px; justify-content: center; padding-inline: 8px; }
+
+  .btn-reset {
+    color: var(--text-primary);
+    justify-content: center;
+    text-align: center;
+  }
+  .btn-reset:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .btn-reset:hover {
+    opacity: 0.85;
+  }
+
+  #toc-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .toc-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    border-left: 2px solid transparent;
+    padding: 8px 10px;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+  }
+
+  .toc-item:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-hover);
+  }
+
+  .toc-item.is-current {
+    color: var(--text-primary);
+    font-weight: 600;
+    border-left-color: var(--text-primary);
+  }
+
+  .toc-item[data-level="2"] { padding-left: 20px; }
+  .toc-item[data-level="3"] { padding-left: 30px; font-size: 12px; }
+  .toc-item[data-level="4"] { padding-left: 40px; font-size: 12px; }
+  .toc-item[data-level="5"] { padding-left: 50px; font-size: 11px; }
+  .toc-item[data-level="6"] { padding-left: 60px; font-size: 11px; }
+
+  .toc-empty {
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 12px 4px;
+  }
+
+  #bg-viewport-indicator {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 10000;
+    display: none;
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-panel);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.22);
+    pointer-events: none;
+  }
+  #bg-viewport-indicator.is-visible { display: block; }
+  #bg-viewport-map {
+    position: relative;
+    width: var(--map-width, 120px);
+    height: var(--map-height, 80px);
+    overflow: hidden;
+    border: 1px solid var(--text-muted);
+    background: var(--bg-hover);
+  }
+  #bg-viewport-image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 1px solid var(--text-secondary);
+    opacity: 0.72;
+  }
+  #bg-viewport-rect {
+    position: absolute;
+    left: var(--view-left, 0%);
+    top: var(--view-top, 0%);
+    width: var(--view-width, 100%);
+    height: var(--view-height, 100%);
+    border: 2px solid var(--text-primary);
+    background: rgba(128, 128, 128, 0.18);
+    box-shadow: 0 0 0 1px var(--bg-panel);
+  }
+
+
+  #error-notice {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: min(calc(100vw - 32px), 560px);
+    padding: 12px 14px 12px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  #error-notice[hidden] { display: none; }
+  #error-notice-message { flex: 1 1 auto; min-width: 0; }
+  #btn-close-error-notice {
+    display: grid;
+    place-items: center;
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
+    padding: 3px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+  }
+  #btn-close-error-notice:hover { background: var(--bg-hover); }
+  #btn-close-error-notice svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+  }
+
+</style>
+<script type="text/javascript" nonce="e75ff3f65d834f5d8c01d6dd546" src="//local.adguard.org?ts=1795165695839&amp;type=content-script&amp;dmn=chatgpt.com&amp;url=https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Festuary%2Fcontent%3Fid%3Dfile_00000000c8808211be9facac672fba33%26fn%3Dnovel_viewer.html%26cd%3Dattachment%26ts%3D498658%26p%3Dfs%26cid%3D1%26sig%3D6c734264819c6a38860b16ba6e1d1bf958b2a8179fba6008bfa41b2dfd2573c7%26v%3D0&amp;app=chrome.exe&amp;css=2&amp;js=1&amp;rel=1&amp;rji=1&amp;sbe=1"></script><script type="text/javascript" nonce="e75ff3f65d834f5d8c01d6dd546" src="//local.adguard.org?ts=1795165695839&amp;name=AdGuard%20Extra&amp;name=AdGuard%20Popup%20Blocker&amp;type=user-script"></script></head>
+<body>
+  <div id="error-notice" role="alert" aria-live="assertive" hidden>
+    <span id="error-notice-message"></span>
+    <button id="btn-close-error-notice" type="button" aria-label="閉じる" title="閉じる">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18" /></svg>
+    </button>
+  </div>
+  <video id="background-video" muted autoplay loop playsinline></video>
+  <div id="bg-viewport-indicator" aria-hidden="true">
+    <div id="bg-viewport-map">
+      <div id="bg-viewport-image"></div>
+      <div id="bg-viewport-rect"></div>
+    </div>
+  </div>
+
+  <button id="btn-open-settings" class="icon-btn" type="button" aria-label="設定を開く" title="設定">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="11.05" r="3.75" />
+      <path d="M10 2.75h4l.55 2.1a7.6 7.6 0 0 1 1.65.95l2.05-.7 2 3.46-1.5 1.55a7.8 7.8 0 0 1 0 1.9l1.5 1.55-2 3.46-2.05-.7a7.6 7.6 0 0 1-1.65.95L14 19.35h-4l-.55-2.08a7.6 7.6 0 0 1-1.65-.95l-2.05.7-2-3.46 1.5-1.56a7.8 7.8 0 0 1 0-1.9l-1.5-1.54 2-3.46 2.05.7a7.6 7.6 0 0 1 1.65-.95L10 2.75Z" />
+    </svg>
+  </button>
+
+  <main id="viewer-container" tabindex="0">
+    <article id="novel-content">
+      <h1>Hitohira</h1>
+      <p>外部サーバーや外部ライブラリに依存せず、1つのHTMLファイルで小説を読むためのビューアです。</p>
+      <h2>本文を読む</h2>
+      <p>TXT・Markdown・HTMLの本文を、設定メニューのファイル選択または画面へのドラッグ＆ドロップで読み込めます。本文は安全なHTMLへ変換して表示します。</p>
+      <p>Markdownでは見出し、表、リスト、引用、コードブロックなどに対応しています。ルビは「漢字《かんじ》」、対象語を指定する場合は「｜今日《こんにち》」の形式で記述できます。</p>
+      <h2>表示と背景を整える</h2>
+      <p>縦書き・横書き、明朝体・ゴシック体、文字サイズ、行間、字間、ルビ、本文幅、余白、配色、ライト・ダークテーマを調整できます。</p>
+      <p>PNG・APNG・JPEG・WebP・GIF・BMP・SVGの画像や、ブラウザーが再生できる動画を背景に設定できます。背景メディアはドラッグまたはタッチで移動でき、ダブルクリックで位置を戻せます。</p>
+      <h2>目次とキーボード操作</h2>
+      <p>本文の見出しから目次を作成できます。読書位置、設定、読み込んだ本文と元ファイルは保存領域へ自動保存されます。</p>
+      <p>本文上のクリックでページ送り、横書きでは矢印キー、縦書きでは左右キーで移動します。PageDown・PageUp・Space・Shift+Space、Home・Endも使えます。F1で操作一覧、Sで設定、Oで目次を表示します。</p>
+      <h2>保存とエクスポート</h2>
+      <p>HTMLエクスポートでは、本文・設定・背景メディア・必要な元ファイル情報を1つのHTMLに埋め込みます。外部ファイルや実行時の一時URLを必要とせず、単独で開けます。</p>
+      <p>読み込んだテキスト・画像・動画の元ファイルは、個別に元のバイト列のままエクスポートできます。個人情報や機密情報を含む本文・メディアを扱う場合は、共有やエクスポートの前に内容を確認してください。</p>
+    </article>
+  </main>
+
+  <div id="progress-indicator" class="is-hidden" aria-live="polite">0%</div>
+
+  <aside id="settings-drawer" class="drawer-panel" aria-label="設定">
+    <div class="drawer-header">
+      <span class="drawer-title">設定</span>
+      <div class="drawer-header-actions">
+        
+        <button id="btn-theme-toggle" class="icon-btn" type="button" aria-label="テーマを切り替え" title="テーマを切り替え">
+          <svg viewBox="0 0 24 24" aria-hidden="true" id="theme-toggle-icon"><path d="M20.2 15.4A8.5 8.5 0 0 1 8.6 3.8 8.8 8.8 0 1 0 20.2 15.4Z" /></svg>
+        </button>
+        <button id="btn-open-help" class="icon-btn" type="button" aria-label="キーボードショートカットを表示" title="ヘルプ">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M9.7 9a2.35 2.35 0 1 1 3.8 1.85c-.95.75-1.5 1.2-1.5 2.4M12 16.8v.1" /></svg>
+        </button>
+        <button id="btn-open-toc" class="icon-btn" type="button" aria-label="目次を開く" title="目次">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="4" cy="6" r="1.25" fill="currentColor" stroke="none" />
+            <circle cx="4" cy="12" r="1.25" fill="currentColor" stroke="none" />
+            <circle cx="4" cy="18" r="1.25" fill="currentColor" stroke="none" />
+            <path d="M9 6h11M9 12h11M9 18h11" />
+          </svg>
+        </button>
+        <button id="btn-close-settings" class="icon-btn" type="button" aria-label="設定を閉じる" title="閉じる">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6 18 18M18 6 6 18" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="drawer-body">
+      <div class="control-group">
+        <div class="control-label"><span>書字方向</span></div>
+        <div class="segmented-control" id="ctrl-writing-mode">
+          <button type="button" data-value="horizontal" class="is-active">横書き</button>
+          <button type="button" data-value="vertical">縦書き</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <div class="control-label"><span>書体</span></div>
+        <div class="segmented-control" id="ctrl-font">
+          <button type="button" data-value="serif" class="is-active">明朝体</button>
+          <button type="button" data-value="sans">ゴシック体</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <div class="control-label">
+          <span>文字サイズ</span>
+          <span class="control-value" id="val-font-size">16px</span>
+        </div>
+        <input type="range" id="ctrl-font-size" min="10" max="22" step="1" value="16">
+      </div>
+
+      <div class="control-group">
+        <div class="control-label">
+          <span>行間隔</span>
+          <span class="control-value" id="val-line-height">2.0</span>
+        </div>
+        <input type="range" id="ctrl-line-height" min="1.0" max="3.0" step="0.1" value="2.0">
+      </div>
+
+      <div class="control-group">
+        <div class="control-label">
+          <span>文字間隔</span>
+          <span class="control-value" id="val-letter-spacing">0.04em</span>
+        </div>
+        <input type="range" id="ctrl-letter-spacing" min="0" max="0.08" step="0.01" value="0.04">
+      </div>
+      <div class="control-group"><div class="control-label"><span>本文幅</span><span class="control-value" id="val-content-width">720px</span></div><input type="range" id="ctrl-content-width" min="480" max="960" step="20" value="720"></div>
+      <div class="control-group"><div class="control-label"><span>本文余白</span><span class="control-value" id="val-content-padding">48px</span></div><input type="range" id="ctrl-content-padding" min="16" max="80" step="4" value="48"></div>
+      <div class="control-group"><div class="control-label"><span>背景ぼかし</span><span class="control-value" id="val-background-blur">12px</span></div><input type="range" id="ctrl-background-blur" min="0" max="24" step="2" value="12"></div>
+
+      <div class="control-group">
+        <div class="control-label">
+          <span>ルビサイズ</span>
+          <span class="control-value" id="val-ruby-scale">50%</span>
+        </div>
+        <input type="range" id="ctrl-ruby-scale" min="0.30" max="0.70" step="0.05" value="0.50">
+      </div>
+
+      <div class="color-row">
+        <label for="ctrl-bg-color">背景色</label>
+        <input type="color" id="ctrl-bg-color" value="#f7f7f7">
+      </div>
+
+      <div class="color-row">
+        <label for="ctrl-narration-color">文章の文字色</label>
+        <input type="color" id="ctrl-narration-color" value="#1c1c1c">
+      </div>
+
+      <div class="color-row">
+        <label for="ctrl-dialogue-color">台詞の文字色</label>
+        <input type="color" id="ctrl-dialogue-color" value="#595959">
+      </div>
+
+      <div class="color-row">
+        <label for="ctrl-panel-color">本文パネル色</label>
+        <input type="color" id="ctrl-panel-color" value="#ffffff">
+      </div>
+
+      <label class="toggle-row" for="ctrl-auto-sync">
+        <span>色を自動選択</span>
+        <span class="switch">
+          <input type="checkbox" id="ctrl-auto-sync">
+          <span class="slider"></span>
+        </span>
+      </label>
+
+      <div class="control-group">
+        <div class="control-label">
+          <span>テキスト背景の不透明度</span>
+          <span class="control-value" id="val-panel-bg-alpha">75%</span>
+        </div>
+        <input type="range" id="ctrl-panel-bg-alpha" min="0.0" max="1.0" step="0.05" value="0.75">
+      </div>
+
+      <label class="toggle-row" for="ctrl-show-progress">
+        <span>読書進捗率を表示</span>
+        <span class="switch">
+          <input type="checkbox" id="ctrl-show-progress">
+          <span class="slider"></span>
+        </span>
+      </label>
+      <label class="toggle-row" for="ctrl-wake-lock">
+        <span>画面スリープを防止 <span id="wake-lock-status" aria-live="polite"></span></span>
+        <span class="switch"><input type="checkbox" id="ctrl-wake-lock"><span class="slider"></span></span>
+      </label>
+
+      <div class="control-group" id="import-file-group">
+        <div class="control-label"><span>インポート</span></div>
+        <div class="action-btn-row">
+          <div class="file-action-group"><span class="file-action-label">テキスト / 画像 / 動画</span><button type="button" class="action-btn file-icon-btn" id="btn-import-file" title="ファイルをインポート" aria-label="ファイルをインポート"><svg class="action-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v3h16v-3" /></svg></button></div>
+        </div>
+      </div>
+      <div class="control-group" id="download-file-group">
+          <div class="control-label"><span>エクスポート</span></div>
+          <div class="action-btn-row" id="loaded-file-downloads" aria-label="読み込みファイルとHTMLのダウンロード">
+            <div class="file-action-group export-html-group"><span class="file-action-label">HTML</span><button type="button" class="action-btn file-icon-btn" id="btn-export-html" title="HTMLを書き出す" aria-label="HTMLを書き出す"><svg class="action-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m-5 5 5-5 5 5M4 17v3h16v-3" /></svg></button></div>
+          </div>
+      </div>
+      <input type="file" id="file-input" accept=".txt,.html,.htm,image/png,image/apng,image/jpeg,image/webp,image/gif,image/bmp,image/svg+xml,video/*,.png,.apng,.jpg,.jpeg,.webp,.gif,.bmp,.svg" multiple hidden>
+    </div>
+
+    <div class="drawer-footer">
+      <button type="button" class="action-btn btn-reset" id="btn-reset-all">設定を初期化</button>
+    </div>
+  </aside>
+
+  <dialog id="shortcut-modal" aria-labelledby="shortcut-modal-title">
+    <div class="shortcut-modal-body">
+      <div class="shortcut-modal-header">
+        <span id="shortcut-modal-title" class="shortcut-modal-title">キーボードショートカット</span>
+        <button id="btn-close-help" class="icon-btn" type="button" aria-label="ヘルプを閉じる" title="閉じる">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18" /></svg>
+        </button>
+      </div>
+      <table class="shortcut-table">
+        <thead><tr><th>キー</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr><td>矢印キー</td><td>表示方向に合わせてスクロール</td></tr>
+          <tr><td>Space</td><td>次のページへ移動</td></tr>
+          <tr><td>Shift + Space</td><td>前のページへ移動</td></tr>
+          <tr><td>PageDown / PageUp</td><td>次のページ / 前のページへ移動</td></tr>
+          <tr><td>Home / End</td><td>先頭 / 末尾へ移動</td></tr>
+          <tr><td>F11</td><td>フルスクリーンを切り替え</td></tr>
+          <tr><td>F1</td><td>キーボードショートカットのヘルプを表示</td></tr>
+          <tr><td>S</td><td>設定を開く</td></tr>
+          <tr><td>O</td><td>目次を開く</td></tr>
+          <tr><td>Escape</td><td>設定・目次を閉じる</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </dialog>
+
+  <aside id="toc-drawer" class="drawer-panel" aria-label="目次">
+    <div class="drawer-header">
+      <span class="drawer-title">目次</span>
+      <button id="btn-close-toc" class="icon-btn" type="button" aria-label="目次を閉じる" title="閉じる">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 6 18 18M18 6 6 18" />
+        </svg>
+      </button>
+    </div>
+    <div class="drawer-body">
+      <ul id="toc-list"></ul>
+    </div>
+  </aside>
+
+<script id="viewer-initial-config" type="application/json">
+{
+  "writingMode": "horizontal",
+  "theme": "light",
+  "fontFamily": "serif",
+  "fontSize": 16,
+  "lineHeight": 2.0,
+  "letterSpacing": 0.04,
+  "rubyScale": 0.50,
+  "panelBgAlpha": 0.75,
+  "contentWidth": 720,
+  "contentPadding": 48,
+  "backgroundBlur": 12,
+  "showProgress": false,
+  "wakeLock": false,
+  "bgColor": "#f7f7f7",
+  "narrationColor": "#1c1c1c",
+  "dialogueColor": "#595959",
+  "panelColor": "#ffffff",
+  "autoSync": false,
+  "fileStem": "",
+  "documentTitle": ""
+}
+</script>
+
+<script>
+(() => {
+  'use strict';
+
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
+  const STORAGE_KEYS = {
+    SETTINGS: 'hitohira_settings',
+    POSITION: 'hitohira_position',
+    CONTENT:  'hitohira_content'
+  };
+  let currentDocumentId = 'default';
+  const getPositionStorageKey = () => `${STORAGE_KEYS.POSITION}:${currentDocumentId}`;
+  function makeDocumentId(value) {
+    let hash = 2166136261;
+    for (const char of String(value || '')) { hash ^= char.charCodeAt(0); hash = Math.imul(hash, 16777619); }
+    return (hash >>> 0).toString(16);
+  }
+  const MEDIA_DB_NAME = 'hitohira_media_db';
+  const MEDIA_DB_VERSION = 1;
+  const MEDIA_STORE_NAME = 'background_media';
+  const MEDIA_STORE_KEY = 'current';
+  const TEXT_STORE_KEY = 'current_text';
+
+  function openMediaDatabase() {
+    return new Promise((resolve, reject) => {
+      if (!('indexedDB' in window)) return reject(new Error('IndexedDB is unavailable'));
+      const request = indexedDB.open(MEDIA_DB_NAME, MEDIA_DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(MEDIA_STORE_NAME)) db.createObjectStore(MEDIA_STORE_NAME);
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error('IndexedDB open failed'));
+    });
+  }
+
+  async function storeBackgroundMedia(blob, mediaType) {
+    const db = await openMediaDatabase();
+    try {
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(MEDIA_STORE_NAME, 'readwrite');
+        tx.objectStore(MEDIA_STORE_NAME).put({ blob, mediaType, fileExtension: blob && blob.name ? getFileExtension(blob.name) : '', updatedAt: Date.now() }, MEDIA_STORE_KEY);
+        tx.oncomplete = resolve;
+        tx.onabort = () => reject(tx.error || new Error('IndexedDB write aborted'));
+      });
+    } finally { db.close(); }
+  }
+
+  async function storeImportedText(blob, extension) {
+    const db = await openMediaDatabase();
+    try {
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(MEDIA_STORE_NAME, 'readwrite');
+        tx.objectStore(MEDIA_STORE_NAME).put({ blob, fileExtension: extension || '', updatedAt: Date.now() }, TEXT_STORE_KEY);
+        tx.oncomplete = resolve;
+        tx.onabort = () => reject(tx.error || new Error('Text file write aborted'));
+      });
+    } finally { db.close(); }
+  }
+
+  async function loadImportedText() {
+    const db = await openMediaDatabase();
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(MEDIA_STORE_NAME, 'readonly');
+        const request = tx.objectStore(MEDIA_STORE_NAME).get(TEXT_STORE_KEY);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error || new Error('Text file read failed'));
+      });
+    } finally { db.close(); }
+  }
+
+  async function loadBackgroundMedia() {
+    const db = await openMediaDatabase();
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(MEDIA_STORE_NAME, 'readonly');
+        const request = tx.objectStore(MEDIA_STORE_NAME).get(MEDIA_STORE_KEY);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error || new Error('IndexedDB read failed'));
+      });
+    } finally { db.close(); }
+  }
+
+  async function deleteMediaRecords(keys) {
+    if (!keys.length) return;
+    const db = await openMediaDatabase();
+    try {
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(MEDIA_STORE_NAME, 'readwrite');
+        tx.oncomplete = resolve;
+        tx.onabort = () => reject(tx.error || new Error('IndexedDB delete aborted'));
+        const store = tx.objectStore(MEDIA_STORE_NAME);
+        try {
+          for (const key of keys) store.delete(key);
+        } catch (error) {
+          tx.abort();
+          reject(error);
+        }
+      });
+    } finally { db.close(); }
+  }
+
+  let changingSavedData = false;
+  async function changeSavedData(changes, mediaKeys) {
+    if (changingSavedData) return false;
+    const write = (key, value) => value === null ? localStorage.removeItem(key) : localStorage.setItem(key, value);
+    const previous = changes.map(([key]) => [key, localStorage.getItem(key)]);
+    let applied = 0;
+    changingSavedData = true;
+    try {
+      for (const [key, value] of changes) {
+        write(key, value);
+        applied++;
+      }
+      await deleteMediaRecords(mediaKeys);
+      return true;
+    } catch (error) {
+      for (const [key, value] of previous.slice(0, applied).reverse()) {
+        try { write(key, value); }
+        catch (rollbackError) { console.error('保存データを元に戻せませんでした:', rollbackError); }
+      }
+      throw error;
+    } finally {
+      changingSavedData = false;
+    }
+  }
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error || new Error('FileReader failed'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  const THEME_PALETTES = {
+    light: {
+      bgColor: '#f7f7f7',
+      narrationColor: '#1c1c1c',
+      dialogueColor: '#595959',
+      panelColor: '#ffffff',
+      panelBgAlpha: 0.75
+    },
+    dark: {
+      bgColor: '#0a0a0a',
+      narrationColor: '#e3e3e3',
+      dialogueColor: '#b8b8b8',
+      panelColor: '#000000',
+      panelBgAlpha: 0.75
+    }
+  };
+
+  const DEFAULT_BACKGROUND_IMAGES = {
+    light: 'data:image/png;base64,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',
+    dark: 'data:image/png;base64,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'
+  };
+
+  const embeddedConfigEl = document.getElementById('viewer-initial-config');
+  const DEFAULT_SETTINGS = JSON.parse(embeddedConfigEl.textContent);
+
+  const novelContentElement = document.getElementById('novel-content');
+  const initialNovelContentHtml = novelContentElement.innerHTML;
+  let viewerResetDefaults;
+
+  let activeViewerSettings = { ...DEFAULT_SETTINGS };
+  let themeDerivedColors = { ...THEME_PALETTES.light };
+  let backgroundMediaDataUrl = null;
+  let backgroundMediaObjectUrl = null;
+  let isRestoringReadingPosition = false;
+  let backgroundMediaType = null;
+  let importedTextFileBlob = null;
+  let importedTextFileExtension = '';
+  let backgroundMediaFileBlob = null;
+  let backgroundMediaFileExtension = '';
+  let lastLoadedImageElement = null;
+  const backgroundVideo = document.getElementById("background-video");
+  let backgroundMediaNaturalWidth = 0;
+  let backgroundMediaNaturalHeight = 0;
+  let backgroundMediaOffsetX = 0;
+  let backgroundMediaOffsetY = 0;
+  let screenWakeLock = null;
+  const isMediaType = type => type === 'image' || type === 'video';
+  const setBackgroundImageStyle = value => {
+    document.documentElement.style.setProperty('--bg-image', value);
+    document.documentElement.style.backgroundImage = value === 'none' ? 'none' : value;
+    document.body.style.backgroundImage = value === 'none' ? 'none' : value;
+  };
+  let tableOfContentsEntries = [];
+  let activeTableOfContentsEntryId = null;
+  let heldScrollTimer = null;
+  let heldScrollDelta = 0;
+  let heldScrollVertical = false;
+  let heldScrollWaiting = false;
+  let heldScrollFallback = null;
+  const stopHeldScroll = () => {
+    if (heldScrollTimer) clearInterval(heldScrollTimer);
+    heldScrollTimer = null;
+    heldScrollWaiting = false;
+    if (heldScrollFallback) clearTimeout(heldScrollFallback);
+    heldScrollFallback = null;
+  };
+
+  const viewerContainer = document.getElementById('viewer-container');
+  const progressIndicator = document.getElementById('progress-indicator');
+
+  const settingsDrawer = document.getElementById('settings-drawer');
+  const tocDrawer = document.getElementById('toc-drawer');
+  const tocListEl = document.getElementById('toc-list');
+
+  const btnOpenSettings = document.getElementById('btn-open-settings');
+  const btnCloseSettings = document.getElementById('btn-close-settings');
+  const btnThemeToggle = document.getElementById('btn-theme-toggle');
+  const btnOpenHelp = document.getElementById('btn-open-help');
+  const shortcutModal = document.getElementById('shortcut-modal');
+  const btnCloseHelp = document.getElementById('btn-close-help');
+  const btnOpenToc = document.getElementById('btn-open-toc');
+  const btnCloseToc = document.getElementById('btn-close-toc');
+
+  const writingModeControl = document.getElementById('ctrl-writing-mode');
+  const ctrlFont = document.getElementById('ctrl-font');
+  const fontSizeControl = document.getElementById('ctrl-font-size');
+  const lineHeightControl = document.getElementById('ctrl-line-height');
+  const letterSpacingControl = document.getElementById('ctrl-letter-spacing');
+  const contentWidthControl = document.getElementById('ctrl-content-width');
+  const contentPaddingControl = document.getElementById('ctrl-content-padding');
+  const backgroundBlurControl = document.getElementById('ctrl-background-blur');
+  const rubyScaleControl = document.getElementById('ctrl-ruby-scale');
+
+  const ctrlBgColor = document.getElementById('ctrl-bg-color');
+  const ctrlNarrationColor = document.getElementById('ctrl-narration-color');
+  const ctrlDialogueColor = document.getElementById('ctrl-dialogue-color');
+  const ctrlPanelColor = document.getElementById('ctrl-panel-color');
+  const automaticColorSyncControl = document.getElementById('ctrl-auto-sync');
+
+  const contentBackgroundOpacityControl = document.getElementById('ctrl-panel-bg-alpha');
+  const readingProgressVisibilityControl = document.getElementById('ctrl-show-progress');
+  const wakeLockControl = document.getElementById('ctrl-wake-lock');
+  const wakeLockStatus = document.getElementById('wake-lock-status');
+
+  const valFontSize = document.getElementById('val-font-size');
+  const valLineHeight = document.getElementById('val-line-height');
+  const valLetterSpacing = document.getElementById('val-letter-spacing');
+  const valContentWidth = document.getElementById('val-content-width');
+  const valContentPadding = document.getElementById('val-content-padding');
+  const valBackgroundBlur = document.getElementById('val-background-blur');
+  const valRubyScale = document.getElementById('val-ruby-scale');
+  const valContentBgAlpha = document.getElementById('val-panel-bg-alpha');
+
+  const btnImportFile = document.getElementById('btn-import-file');
+  const fileInput = document.getElementById('file-input');
+  const btnExportHtml = document.getElementById('btn-export-html');
+  const btnResetAll = document.getElementById('btn-reset-all');
+
+  async function releaseScreenWakeLock() {
+    if (screenWakeLock) { try { await screenWakeLock.release(); } catch (_) {} screenWakeLock = null; }
+  }
+  async function updateScreenWakeLock() {
+    const supported = 'wakeLock' in navigator && typeof navigator.wakeLock.request === 'function';
+    wakeLockControl.disabled = !supported;
+    if (!supported) { wakeLockStatus.textContent = '（利用不可）'; await releaseScreenWakeLock(); return; }
+    if (!activeViewerSettings.wakeLock || document.visibilityState !== 'visible') {
+      wakeLockStatus.textContent = activeViewerSettings.wakeLock ? '（待機中）' : '';
+      await releaseScreenWakeLock();
+      return;
+    }
+    try {
+      if (!screenWakeLock) screenWakeLock = await navigator.wakeLock.request('screen');
+      screenWakeLock.addEventListener('release', () => { screenWakeLock = null; });
+      wakeLockStatus.textContent = '（有効）';
+    } catch (_) { wakeLockStatus.textContent = '（取得失敗）'; }
+  }
+
+  function updateResetButtonState() {
+    const comparableContent = html => {
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = html || '';
+      wrapper.querySelectorAll('[id^="heading-"]').forEach(element => element.removeAttribute('id'));
+      return wrapper.innerHTML.trim();
+    };
+    const valuesEqual = (current, initial) => {
+      if ((current === undefined || current === null) && (initial === undefined || initial === null || initial === '')) return true;
+      if (typeof current === 'number' || typeof initial === 'number') return Number(current) === Number(initial);
+      return String(current ?? '') === String(initial ?? '');
+    };
+    const defaults = getViewerResetDefaults();
+    const settingsDefault = Object.keys(defaults.settings).every(key => valuesEqual(activeViewerSettings[key], defaults.settings[key]));
+    const contentDefault = comparableContent(novelContentElement.innerHTML) === comparableContent(defaults.content);
+    // Reading position and background offsets are intentionally excluded.
+    const sourcesDefault = !backgroundMediaDataUrl && !importedTextFileBlob && !backgroundMediaFileBlob &&
+      !activeViewerSettings.fileStem && !activeViewerSettings.documentTitle;
+    btnResetAll.disabled = settingsDefault && contentDefault && sourcesDefault;
+    btnResetAll.setAttribute('aria-disabled', String(btnResetAll.disabled));
+  }
+  const loadedFileDownloads = document.getElementById('loaded-file-downloads');
+  const errorNotice = document.getElementById('error-notice');
+  const errorNoticeMessage = document.getElementById('error-notice-message');
+  const btnCloseErrorNotice = document.getElementById('btn-close-error-notice');
+  let errorNoticeTimer = null;
+
+  function showErrorNotice(message) {
+    errorNoticeMessage.textContent = message;
+    errorNotice.hidden = false;
+    if (errorNoticeTimer) clearTimeout(errorNoticeTimer);
+    errorNoticeTimer = setTimeout(() => {
+      errorNotice.hidden = true;
+      errorNoticeTimer = null;
+    }, 5000);
+  }
+
+  function hideErrorNotice() {
+    errorNotice.hidden = true;
+    if (errorNoticeTimer) clearTimeout(errorNoticeTimer);
+    errorNoticeTimer = null;
+  }
+
+  btnCloseErrorNotice.addEventListener('click', hideErrorNotice);
+
+  function getFileExtension(name) {
+    const match = String(name || '').match(/\.([a-z0-9]{1,10})$/i);
+    return match ? `.${match[1]}` : '';
+  }
+
+  async function readTextFile(file) {
+    const buffer = await file.arrayBuffer();
+    let encoding = 'utf-8';
+    const bytes = new Uint8Array(buffer);
+    if (bytes[0] === 0xff && bytes[1] === 0xfe) encoding = 'utf-16le';
+    else if (bytes[0] === 0xfe && bytes[1] === 0xff) encoding = 'utf-16be';
+    const text = new TextDecoder(encoding, { fatal: false }).decode(buffer).replace(/^\uFEFF/, '');
+    if ((text.match(/\uFFFD/g) || []).length > Math.max(2, text.length * 0.01)) throw new Error('文字コードを判定できません。UTF-8またはUTF-16のファイルを使用してください。');
+    return text;
+  }
+
+  function getExportButtonDefinitions(textBlob, mediaBlob, mediaType) {
+    return [
+      { id: 'btn-download-text', label: 'テキスト', title: '読み込んだテキストファイルをSHA-256名で保存', available: textBlob instanceof Blob },
+      { id: 'btn-download-image', label: '画像', title: '読み込んだ画像ファイルをSHA-256名で保存', available: mediaBlob instanceof Blob && mediaType === 'image' },
+      { id: 'btn-download-video', label: '動画', title: '読み込んだ動画ファイルをSHA-256名で保存', available: mediaBlob instanceof Blob && mediaType === 'video' }
+    ];
+  }
+
+  function getRuntimeDataDeleteType(button) {
+    const type = button && button.dataset ? button.dataset.deleteType : '';
+    return type === 'text' || type === 'image' || type === 'video' ? type : null;
+  }
+
+  function refreshExportButtons() {
+    const buttonDefinitions = getExportButtonDefinitions(importedTextFileBlob, backgroundMediaFileBlob, backgroundMediaType);
+    for (const definition of buttonDefinitions) {
+      const existingButton = loadedFileDownloads.querySelector(`#${definition.id}`);
+      const existingGroup = existingButton?.closest('.file-action-group');
+      if (!definition.available) {
+        existingGroup?.remove();
+        continue;
+      }
+      if (existingButton) continue;
+      const group = document.createElement('div');
+      group.className = 'file-action-group';
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'action-btn file-icon-btn'; button.id = definition.id; button.title = definition.title; button.setAttribute('aria-label', definition.title);
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      icon.setAttribute('class', 'action-btn-icon');
+      icon.setAttribute('viewBox', '0 0 24 24');
+      icon.setAttribute('aria-hidden', 'true');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M12 15V3m-5 5 5-5 5 5M4 17v3h16v-3');
+      icon.appendChild(path);
+      button.append(icon);
+      const deleteButton = document.createElement('button');
+      deleteButton.type = 'button'; deleteButton.className = 'action-btn file-delete-btn';
+      deleteButton.id = `${definition.id}-delete`; deleteButton.dataset.deleteType = definition.id.replace('btn-download-', '');
+      deleteButton.title = `${definition.label}の実行時データを削除`;
+      deleteButton.setAttribute('aria-label', deleteButton.title);
+      const deleteIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      deleteIcon.setAttribute('class', 'action-btn-icon'); deleteIcon.setAttribute('viewBox', '0 0 24 24'); deleteIcon.setAttribute('aria-hidden', 'true');
+      const deletePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      deletePath.setAttribute('d', 'M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3');
+      deleteIcon.appendChild(deletePath); deleteButton.appendChild(deleteIcon);
+      const label = document.createElement('span');
+      label.className = 'file-action-label'; label.textContent = definition.label;
+      group.append(label, deleteButton, button);
+      loadedFileDownloads.appendChild(group);
+    }
+  }
+
+  async function downloadWithHash(blob, extension, fallbackExtension) {
+    if (!(blob instanceof Blob)) return;
+    if (!crypto.subtle) throw new Error('この環境ではSHA-256を計算できません。HTTPSまたはlocalhostで開いてください。');
+    const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+    const stem = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${stem}${extension || fallbackExtension || ''}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const chunkSize = 0x8000;
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+    }
+    return btoa(binary);
+  }
+
+  function dataUrlToBlob(dataUrl) {
+    const comma = dataUrl.indexOf(',');
+    if (comma < 0) throw new Error('埋め込みメディアの形式が不正です。');
+    const header = dataUrl.slice(0, comma);
+    const mime = (header.match(/^data:([^;]+)/i) || [])[1] || 'application/octet-stream';
+    const binary = atob(dataUrl.slice(comma + 1));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  }
+
+  function getFileStem(fileName) {
+    const lastDot = fileName.lastIndexOf('.');
+    return lastDot > 0 ? fileName.substring(0, lastDot) : fileName;
+  }
+
+  function resolveDocumentTitle(documentTitle, fileStem, fallback = 'Hitohira') {
+    return (documentTitle && documentTitle.trim()) || (fileStem && fileStem.trim()) || fallback;
+  }
+
+  function rgbToHex(r, g, b) {
+    return '#' + [r, g, b].map(x => {
+      const hex = x.toString(16);
+      return hex.length === 1 ? '0' + hex : hex;
+    }).join('');
+  }
+
+  function hexToRgbString(hex) {
+    const cleanHex = (hex || '#ffffff').replace('#', '');
+    const r = parseInt(cleanHex.substring(0, 2), 16) || 0;
+    const g = parseInt(cleanHex.substring(2, 4), 16) || 0;
+    const b = parseInt(cleanHex.substring(4, 6), 16) || 0;
+    return `${r}, ${g}, ${b}`;
+  }
+
+  function updateBackgroundPosition() {
+    if (!backgroundMediaDataUrl) {
+      document.documentElement.style.setProperty('--bg-pos-x', 'calc(50% + 0px)');
+      document.documentElement.style.setProperty('--bg-pos-y', 'calc(50% + 0px)');
+      return;
+    }
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    if (viewportWidth === 0 || viewportHeight === 0 || backgroundMediaNaturalWidth === 0 || backgroundMediaNaturalHeight === 0) return;
+
+    const mediaAspectRatio = backgroundMediaNaturalWidth / backgroundMediaNaturalHeight;
+    const viewportAspectRatio = viewportWidth / viewportHeight;
+
+    let renderedMediaWidth, renderedMediaHeight;
+    if (viewportAspectRatio > mediaAspectRatio) {
+      renderedMediaWidth = viewportWidth;
+      renderedMediaHeight = viewportWidth / mediaAspectRatio;
+    } else {
+      renderedMediaHeight = viewportHeight;
+      renderedMediaWidth = viewportHeight * mediaAspectRatio;
+    }
+
+    const maximumMediaOffsetX = Math.max(0, (renderedMediaWidth - viewportWidth) / 2);
+    const maximumMediaOffsetY = Math.max(0, (renderedMediaHeight - viewportHeight) / 2);
+
+    backgroundMediaOffsetX = Math.max(-maximumMediaOffsetX, Math.min(maximumMediaOffsetX, backgroundMediaOffsetX));
+    backgroundMediaOffsetY = Math.max(-maximumMediaOffsetY, Math.min(maximumMediaOffsetY, backgroundMediaOffsetY));
+
+    document.documentElement.style.setProperty('--bg-pos-x', `calc(50% + ${backgroundMediaOffsetX}px)`);
+    document.documentElement.style.setProperty('--bg-pos-y', `calc(50% + ${backgroundMediaOffsetY}px)`);
+    if (backgroundMediaType === 'video') {
+
+      backgroundVideo.style.inset = 'auto';
+      backgroundVideo.style.width = `${renderedMediaWidth}px`;
+      backgroundVideo.style.height = `${renderedMediaHeight}px`;
+      backgroundVideo.style.left = `calc(50% - ${renderedMediaWidth / 2}px + ${backgroundMediaOffsetX}px)`;
+      backgroundVideo.style.top = `calc(50% - ${renderedMediaHeight / 2}px + ${backgroundMediaOffsetY}px)`;
+      backgroundVideo.style.transform = 'none';
+      backgroundVideo.style.objectFit = 'fill';
+    }
+    updateBackgroundViewportIndicator();
+  }
+
+  const bgViewportIndicator = document.getElementById('bg-viewport-indicator');
+  const bgViewportMap = document.getElementById('bg-viewport-map');
+  function updateBackgroundViewportIndicator() {
+    if (!backgroundMediaDataUrl || !backgroundMediaNaturalWidth || !backgroundMediaNaturalHeight) return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const ratio = backgroundMediaNaturalWidth / backgroundMediaNaturalHeight;
+    let renderedMediaWidth, renderedMediaHeight;
+    if (vw / vh > ratio) { renderedMediaWidth = vw; renderedMediaHeight = vw / ratio; }
+    else { renderedMediaHeight = vh; renderedMediaWidth = vh * ratio; }
+    const left = (vw - renderedMediaWidth) / 2 + backgroundMediaOffsetX;
+    const top = (vh - renderedMediaHeight) / 2 + backgroundMediaOffsetY;
+    const x1 = Math.max(0, Math.min(1, -left / renderedMediaWidth));
+    const y1 = Math.max(0, Math.min(1, -top / renderedMediaHeight));
+    const x2 = Math.max(0, Math.min(1, (vw - left) / renderedMediaWidth));
+    const y2 = Math.max(0, Math.min(1, (vh - top) / renderedMediaHeight));
+    const mapW = Math.min(150, 100 * ratio);
+    const mapH = Math.min(100, 150 / ratio);
+    bgViewportMap.style.setProperty('--map-width', `${mapW}px`);
+    bgViewportMap.style.setProperty('--map-height', `${mapH}px`);
+    bgViewportMap.style.setProperty('--view-left', `${x1 * 100}%`);
+    bgViewportMap.style.setProperty('--view-top', `${y1 * 100}%`);
+    bgViewportMap.style.setProperty('--view-width', `${Math.max(0, x2 - x1) * 100}%`);
+    bgViewportMap.style.setProperty('--view-height', `${Math.max(0, y2 - y1) * 100}%`);
+  }
+
+  function isAllowedResourceUrl(value, kind) {
+    const normalized = String(value || '').trim();
+    if (kind === 'href') return /^(https?:\/\/|#|(?:\.\.\/|\.\/|[A-Za-z0-9_-]+\/))[^\s]*$/i.test(normalized);
+    if (kind === 'image') return /^(data:image\/(?:png|jpe?g|gif|webp|bmp|svg\+xml);|https?:\/\/|\.\/|\.\.\/)/i.test(normalized);
+    return false;
+  }
+
+  function isEmbeddableMediaDataUrl(value, mediaType) {
+    return typeof value === 'string' && value.startsWith(`data:${mediaType}/`);
+  }
+
+  function createEmbeddedDownloadData(textBase64, textExtension, textMimeType, mediaDataUrl, mediaType, mediaExtension) {
+    const mediaIncluded = (mediaType === 'image' || mediaType === 'video') && isEmbeddableMediaDataUrl(mediaDataUrl, mediaType);
+    return { textBase64: textBase64 || '', textExtension: textExtension || '', textMimeType: textMimeType || '', mediaIncluded, mediaType: mediaIncluded ? mediaType : null, mediaExtension: mediaIncluded ? (mediaExtension || '') : '', mediaDataUrl: mediaIncluded ? mediaDataUrl : '' };
+  }
+
+  function reportOperationFailure(label, error) {
+    console.error(`${label}に失敗しました:`, error);
+    showErrorNotice(`${label}に失敗しました。操作をやり直してください。問題が続く場合は、ブラウザーの開発者コンソールで詳細を確認できます。`);
+  }
+
+  function isAllowedSanitizedAttribute(tagName, attributeName, value) {
+    const tag = String(tagName || '').toUpperCase();
+    const name = String(attributeName || '').toLowerCase();
+    const val = String(value || '').trim();
+    if (tag === 'A' && name === 'href') return isAllowedResourceUrl(val, 'href');
+    if (tag === 'IMG' && (name === 'src' || name === 'alt')) return name === 'alt' || isAllowedResourceUrl(val, 'image');
+    if (name === 'id') return /^heading-\d+$/.test(val);
+    if (name === 'class') return val === 'dialogue' || val === 'ellipsis';
+    return false;
+  }
+
+  function sanitizeHTML(dirtyHtml) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(dirtyHtml, 'text/html');
+    const ALLOWED_TAGS = new Set([
+      'P', 'BR', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+      'RUBY', 'RT', 'RP', 'EM', 'STRONG', 'DEL', 'SPAN', 'DIV', 'IMG', 'HR',
+      'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD',
+      'UL', 'OL', 'LI', 'BLOCKQUOTE', 'PRE', 'CODE', 'A'
+    ]);
+
+    function cleanNode(node) {
+      const children = Array.from(node.childNodes);
+      for (const child of children) {
+        if (child.nodeType === Node.ELEMENT_NODE) {
+          if (!ALLOWED_TAGS.has(child.tagName)) {
+            const textNode = document.createTextNode(child.textContent || '');
+            node.replaceChild(textNode, child);
+            continue;
+          }
+
+          const attrs = Array.from(child.attributes);
+          for (const attr of attrs) {
+            const name = attr.name.toLowerCase();
+            const val = attr.value.trim();
+            if (!isAllowedSanitizedAttribute(child.tagName, name, val)) child.removeAttribute(attr.name);
+          }
+          if (child.tagName === 'A') {
+            const safeHref = child.getAttribute('href');
+            if (safeHref && /^https?:\/\//i.test(safeHref)) {
+              child.setAttribute('target', '_blank');
+              child.setAttribute('rel', 'noopener noreferrer');
+            } else {
+              child.removeAttribute('target');
+              child.removeAttribute('rel');
+            }
+          }
+          cleanNode(child);
+        } else if (child.nodeType !== Node.TEXT_NODE) {
+          node.removeChild(child);
+        }
+      }
+    }
+
+    cleanNode(doc.body);
+    return doc.body.innerHTML;
+  }
+
+  function processPunctuation(text) {
+    return text
+      .replace(/(\.{3,}|…+|⋯+)/g, '<span class="ellipsis">$1</span>')
+      .replace(/(〜+)/g, '<span class="ellipsis">$1</span>');
+  }
+
+  function plainTextToSafeHTML(text) {
+    const escaped = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    const lines = escaped.split(/\r?\n/);
+    const formatInline = value => {
+      const withRuby = value.trim()
+        .replace(/[|｜]([^|｜《》\s]+)《([^《》]+)》/g, '<ruby>$1<rt>$2</rt></ruby>')
+        .replace(/([一-龠々〆ヵヶ]+)(?:《([^《》]+)》)?/g,
+          (match, base, reading) => reading ? `<ruby>${base}<rt>${reading}</rt></ruby>` : match);
+      return withRuby
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, (_, a, b) => `<strong>${a || b}</strong>`)
+        .replace(/~~([^~]+)~~/g, '<del>$1</del>')
+        .replace(/\*([^*]+)\*|_([^_]+)_/g, (_, a, b) => `<em>${a || b}</em>`)
+        .replace(/\[([^\]]+)\]\(((?:https?:\/\/|\.\.\/|\.\/|[A-Za-z0-9_-]+\/|#)[^\s)]+)\)/g, '<a href="$2">$1</a>')
+        .replace(/(「[^」]*」)/g, '<span class="dialogue">$1</span>');
+    };
+    const codeFence = /^\s*```/;
+    const unorderedListMarker = /^\s*[-+*]\s+/;
+    const orderedListMarker = /^\s*\d+[.)]\s+/;
+    const isTableRow = line => line.includes('|') && /^\s*\|?.+\|.+\|?\s*$/.test(line) &&
+      !codeFence.test(line) && !unorderedListMarker.test(line) && !orderedListMarker.test(line);
+    const isTableSeparator = line => line.includes('|') &&
+      /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+    const splitTableRow = line => line.trim().replace(/^\|\s*/, '').replace(/\s*\|$/, '').split('|').map(cell => cell.trim());
+    const output = [];
+    for (let index = 0; index < lines.length;) {
+      if (codeFence.test(lines[index])) {
+        index++;
+        const codeLines = [];
+        while (index < lines.length && !codeFence.test(lines[index])) codeLines.push(lines[index++]);
+        if (index < lines.length) index++;
+        output.push(`<pre><code>${codeLines.join('\n')}</code></pre>`);
+        continue;
+      }
+      if (index + 1 < lines.length && isTableSeparator(lines[index + 1]) && isTableRow(lines[index])) {
+        const headerCells = splitTableRow(lines[index]);
+        const rows = [];
+        index += 2;
+        while (index < lines.length && isTableRow(lines[index]) && !isTableSeparator(lines[index])) {
+          rows.push(splitTableRow(lines[index++]));
+        }
+        const head = `<thead><tr>${headerCells.map(cell => `<th>${formatInline(cell)}</th>`).join('')}</tr></thead>`;
+        const body = rows.length ? `<tbody>${rows.map(row => `<tr>${headerCells.map((_, cellIndex) => `<td>${formatInline(row[cellIndex] || '')}</td>`).join('')}</tr>`).join('')}</tbody>` : '';
+        output.push(`<table>${head}${body}</table>`);
+        continue;
+      }
+
+      const trimmed = lines[index++].trim();
+      if (!trimmed) { output.push(''); continue; }
+
+      if (/^(\*{3,}|-{3,}|_{3,})$/.test(trimmed)) { output.push('<hr>'); continue; }
+
+      if (/^(?:>|&gt;)\s?/.test(trimmed)) {
+        const quoteLines = [trimmed.replace(/^(?:>|&gt;)\s?/, '')];
+        while (index < lines.length && /^(?:>|&gt;)\s?/.test(lines[index].trim())) quoteLines.push(lines[index++].trim().replace(/^(?:>|&gt;)\s?/, ''));
+        output.push(`<blockquote>${quoteLines.map(line => formatInline(line)).join('<br>')}</blockquote>`);
+        continue;
+      }
+
+      if (unorderedListMarker.test(trimmed)) {
+        const items = [trimmed.replace(unorderedListMarker, '')];
+        while (index < lines.length && unorderedListMarker.test(lines[index].trim())) items.push(lines[index++].trim().replace(unorderedListMarker, ''));
+        output.push(`<ul>${items.map(item => `<li>${formatInline(item)}</li>`).join('')}</ul>`);
+        continue;
+      }
+
+      if (orderedListMarker.test(trimmed)) {
+        const items = [trimmed.replace(orderedListMarker, '')];
+        while (index < lines.length && orderedListMarker.test(lines[index].trim())) items.push(lines[index++].trim().replace(orderedListMarker, ''));
+        output.push(`<ol>${items.map(item => `<li>${formatInline(item)}</li>`).join('')}</ol>`);
+        continue;
+      }
+
+      if (/^#{1,6}\s+/.test(trimmed)) {
+        const level = trimmed.match(/^(#{1,6})/)[1].length;
+        const title = trimmed.replace(/^#{1,6}\s+/, '');
+        output.push(`<h${level}>${processPunctuation(formatInline(title))}</h${level}>`);
+        continue;
+      }
+      output.push(`<p>${processPunctuation(formatInline(trimmed))}</p>`);
+    }
+    return output.join('\n');
+  }
+
+  function analyzeImageAndComputeAuto(imgElement) {
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      canvas.width = 50;
+      canvas.height = 50;
+      ctx.drawImage(imgElement, 0, 0, 50, 50);
+      const data = ctx.getImageData(0, 0, 50, 50).data;
+      let r = 0, g = 0, b = 0, count = 0;
+      let totalBrightness = 0;
+
+      for (let i = 0; i < data.length; i += 4) {
+         const alpha = data[i + 3] / 255;
+         const cr = Math.round(data[i] * alpha + 255 * (1 - alpha));
+         const cg = Math.round(data[i + 1] * alpha + 255 * (1 - alpha));
+         const cb = Math.round(data[i + 2] * alpha + 255 * (1 - alpha));
+        r += cr;
+        g += cg;
+        b += cb;
+        totalBrightness += (cr * 0.299 + cg * 0.587 + cb * 0.114);
+        count++;
+      }
+
+      if (count > 0) {
+        r = Math.floor(r / count);
+        g = Math.floor(g / count);
+        b = Math.floor(b / count);
+        const dominantHex = rgbToHex(r, g, b);
+        const avgBrightness = totalBrightness / count;
+
+        themeDerivedColors.panelColor = dominantHex;
+
+        if (avgBrightness < 128) {
+          themeDerivedColors.narrationColor = '#dbdbdb';
+          themeDerivedColors.dialogueColor = '#b8b8b8';
+        } else {
+          themeDerivedColors.narrationColor = '#242424';
+          themeDerivedColors.dialogueColor = '#474747';
+        }
+      }
+    } catch (_) {}
+  }
+
+  function configureBackgroundVideoElement(video) {
+    video.muted = true;
+    video.autoplay = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    video.setAttribute('muted', '');
+    video.setAttribute('autoplay', '');
+    video.setAttribute('loop', '');
+    video.setAttribute('playsinline', '');
+    video.setAttribute('preload', 'auto');
+  }
+
+  function applyBackgroundImage(dataUrl, restoreSavedPosition = false, mediaType = 'image', onLoadError) {
+    const previousObjectUrl = backgroundMediaObjectUrl;
+    backgroundMediaDataUrl = dataUrl || null;
+    backgroundMediaObjectUrl = typeof dataUrl === 'string' && dataUrl.startsWith('blob:') ? dataUrl : null;
+    backgroundMediaType = dataUrl ? mediaType : null;
+    lastLoadedImageElement = null;
+    backgroundMediaNaturalWidth = 0;
+    backgroundMediaNaturalHeight = 0;
+    backgroundMediaOffsetX = 0;
+    backgroundMediaOffsetY = 0;
+    if (previousObjectUrl && previousObjectUrl !== backgroundMediaObjectUrl) {
+      URL.revokeObjectURL(previousObjectUrl);
+    }
+    backgroundVideo.pause();
+    backgroundVideo.onloadedmetadata = null;
+    backgroundVideo.onresize = null;
+    backgroundVideo.oncanplay = null;
+    backgroundVideo.onerror = null;
+    backgroundVideo.removeAttribute('src');
+    backgroundVideo.load();
+    document.body.classList.remove('video-bg');
+    if (!dataUrl) {
+      setBackgroundImageStyle(`url('${DEFAULT_BACKGROUND_IMAGES[activeViewerSettings.theme] || DEFAULT_BACKGROUND_IMAGES.light}')`);
+      document.body.style.backgroundImage = '';
+      document.body.classList.remove('has-bg');
+      updateBackgroundPosition();
+      return;
+    }
+
+    document.body.classList.add('has-bg');
+    const isCurrentMedia = () => backgroundMediaType === mediaType && backgroundMediaDataUrl === dataUrl;
+    const reportLoadError = () => {
+      if (!isCurrentMedia()) return;
+      const error = new Error('背景メディアを読み込めませんでした。');
+      if (onLoadError) onLoadError(error);
+      else console.error(error.message);
+    };
+    if (mediaType === 'video') {
+      setBackgroundImageStyle('none');
+      configureBackgroundVideoElement(backgroundVideo);
+      backgroundVideo.style.inset = 'auto';
+      backgroundVideo.style.transform = 'none';
+      let autoplayRejectionReported = false;
+      const playBackgroundVideo = () => {
+        backgroundVideo.play().catch(error => {
+          if (error?.name !== 'NotAllowedError' || autoplayRejectionReported ||
+              backgroundVideo.onloadedmetadata !== onVideoReady || !backgroundVideo.paused) return;
+          autoplayRejectionReported = true;
+          showErrorNotice('ブラウザーが背景動画の自動再生を拒否しました。');
+        });
+      };
+      const onVideoReady = () => {
+        const videoWidth = backgroundVideo.videoWidth;
+        const videoHeight = backgroundVideo.videoHeight;
+        if (!videoWidth || !videoHeight) return;
+        backgroundMediaNaturalWidth = videoWidth;
+        backgroundMediaNaturalHeight = videoHeight;
+        if (restoreSavedPosition) {
+          try {
+            const savedPosition = JSON.parse(localStorage.getItem(getPositionStorageKey()) || '{}');
+            if (Number.isFinite(savedPosition.bgOffsetX)) backgroundMediaOffsetX = savedPosition.bgOffsetX;
+            if (Number.isFinite(savedPosition.bgOffsetY)) backgroundMediaOffsetY = savedPosition.bgOffsetY;
+          } catch (_) {}
+        }
+        updateBackgroundPosition();
+        updateReadingState();
+        playBackgroundVideo();
+      };
+      backgroundVideo.onloadedmetadata = onVideoReady;
+      
+      backgroundVideo.onresize = onVideoReady;
+      if (onLoadError) {
+        backgroundVideo.onerror = () => {
+          if (backgroundVideo.error && backgroundVideo.onloadedmetadata === onVideoReady) reportLoadError();
+        };
+      }
+      backgroundVideo.oncanplay = () => {
+        backgroundVideo.oncanplay = null;
+        playBackgroundVideo();
+      };
+      backgroundVideo.src = dataUrl;
+      backgroundVideo.load();
+      document.body.classList.add('video-bg');
+      return;
+    }
+
+    setBackgroundImageStyle(`url("${dataUrl}")`);
+    const img = new Image();
+    img.onload = () => {
+      if (!isCurrentMedia()) return;
+      backgroundMediaNaturalWidth = img.naturalWidth;
+      backgroundMediaNaturalHeight = img.naturalHeight;
+      if (restoreSavedPosition) {
+        try {
+            const savedPosition = JSON.parse(localStorage.getItem(getPositionStorageKey()) || '{}');
+          if (Number.isFinite(savedPosition.bgOffsetX)) backgroundMediaOffsetX = savedPosition.bgOffsetX;
+          if (Number.isFinite(savedPosition.bgOffsetY)) backgroundMediaOffsetY = savedPosition.bgOffsetY;
+        } catch (_) {}
+      }
+      lastLoadedImageElement = img;
+      analyzeImageAndComputeAuto(img);
+      applySettings(activeViewerSettings);
+      saveSettings();
+      updateBackgroundPosition();
+      updateReadingState();
+    };
+    img.onerror = reportLoadError;
+    img.src = dataUrl;
+  }
+
+  function updateDocumentTitle() {
+    document.title = resolveDocumentTitle(activeViewerSettings.documentTitle, activeViewerSettings.fileStem);
+  }
+
+  function applySettings(settings) {
+    const root = document.documentElement;
+    root.setAttribute('data-writing-mode', settings.writingMode);
+    root.setAttribute('data-theme', settings.theme);
+    if (!backgroundMediaDataUrl) {
+      setBackgroundImageStyle(`url('${DEFAULT_BACKGROUND_IMAGES[settings.theme] || DEFAULT_BACKGROUND_IMAGES.light}')`);
+    }
+
+    updateDocumentTitle();
+
+    const themeIcon = btnThemeToggle.querySelector('#theme-toggle-icon');
+    themeIcon.innerHTML = settings.theme === 'dark'
+      ? '<circle cx="12" cy="12" r="4" /><path d="M12 1.75v2.5m0 15.5v2.5M1.75 12h2.5m15.5 0h2.5M4.76 4.76l1.77 1.77m10.94 10.94 1.77 1.77M19.24 4.76l-1.77 1.77M6.53 17.47l-1.77 1.77" />'
+      : '<path d="M20.2 15.4A8.5 8.5 0 0 1 8.6 3.8 8.8 8.8 0 1 0 20.2 15.4Z" />';
+    btnThemeToggle.title = settings.theme === 'dark' ? 'ライトテーマに切り替え' : 'ダークテーマに切り替え';
+
+    root.style.setProperty(
+      '--reader-font',
+      settings.fontFamily === 'sans' ? 'var(--font-sans)' : 'var(--font-serif)'
+    );
+    root.style.setProperty('--font-size', `${settings.fontSize}px`);
+    root.style.setProperty('--line-height', String(settings.lineHeight));
+    root.style.setProperty('--letter-spacing', `${settings.letterSpacing}em`);
+    root.style.setProperty('--ruby-scale', String(settings.rubyScale));
+    root.style.setProperty('--panel-bg-alpha', String(settings.panelBgAlpha));
+    root.style.setProperty('--content-width', `${settings.contentWidth}px`);
+    root.style.setProperty('--content-padding', `${settings.contentPadding}px`);
+    root.style.setProperty('--background-blur', `${settings.backgroundBlur}px`);
+
+    const canAutoSyncColors = Boolean(backgroundMediaDataUrl && backgroundMediaType === 'image' && backgroundMediaNaturalWidth && backgroundMediaNaturalHeight);
+    automaticColorSyncControl.disabled = !canAutoSyncColors;
+    automaticColorSyncControl.title = canAutoSyncColors
+      ? '背景画像の平均色から本文色を自動設定'
+      : '背景画像を読み込むと使用できます';
+    const effectiveAutoSync = Boolean(settings.autoSync && canAutoSyncColors);
+    const effectiveBg = settings.bgColor;
+    const effectiveNarration = effectiveAutoSync ? themeDerivedColors.narrationColor : settings.narrationColor;
+    const effectiveDialogue = effectiveAutoSync ? themeDerivedColors.dialogueColor : settings.dialogueColor;
+    const effectivePanel = effectiveAutoSync ? themeDerivedColors.panelColor : settings.panelColor;
+
+    root.style.setProperty('--bg-color', effectiveBg);
+    root.style.setProperty('--narration-color', effectiveNarration);
+    root.style.setProperty('--dialogue-color', effectiveDialogue);
+    root.style.setProperty('--panel-rgb', hexToRgbString(effectivePanel));
+
+    ctrlBgColor.value = effectiveBg;
+    ctrlNarrationColor.value = effectiveNarration;
+    ctrlDialogueColor.value = effectiveDialogue;
+    ctrlPanelColor.value = effectivePanel;
+    automaticColorSyncControl.checked = effectiveAutoSync;
+
+    progressIndicator.classList.toggle('is-hidden', !settings.showProgress);
+
+    syncSegmented(writingModeControl, settings.writingMode);
+    syncSegmented(ctrlFont, settings.fontFamily);
+
+    fontSizeControl.value = settings.fontSize;
+    valFontSize.textContent = `${settings.fontSize}px`;
+
+    lineHeightControl.value = settings.lineHeight;
+    valLineHeight.textContent = Number(settings.lineHeight).toFixed(1);
+
+    letterSpacingControl.value = settings.letterSpacing;
+    valLetterSpacing.textContent = `${Number(settings.letterSpacing).toFixed(2)}em`;
+    contentWidthControl.value = settings.contentWidth; valContentWidth.textContent = `${settings.contentWidth}px`;
+    contentPaddingControl.value = settings.contentPadding; valContentPadding.textContent = `${settings.contentPadding}px`;
+    backgroundBlurControl.value = settings.backgroundBlur; valBackgroundBlur.textContent = `${settings.backgroundBlur}px`;
+
+    rubyScaleControl.value = settings.rubyScale;
+    valRubyScale.textContent = `${Math.round(settings.rubyScale * 100)}%`;
+
+    contentBackgroundOpacityControl.value = settings.panelBgAlpha;
+    valContentBgAlpha.textContent = `${Math.round(settings.panelBgAlpha * 100)}%`;
+
+    readingProgressVisibilityControl.checked = Boolean(settings.showProgress);
+    wakeLockControl.checked = Boolean(settings.wakeLock);
+    updateScreenWakeLock();
+    updateResetButtonState();
+  }
+
+  function syncSegmented(container, activeValue) {
+    container.querySelectorAll('button').forEach(btn => {
+      btn.classList.toggle('is-active', btn.dataset.value === activeValue);
+    });
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(activeViewerSettings));
+    } catch (_) {}
+  }
+
+  function updateSetting(key, value) {
+    const positionBeforeWritingModeChange = key === 'writingMode' && value !== activeViewerSettings.writingMode
+      ? captureReadingPosition()
+      : null;
+    activeViewerSettings[key] = value;
+    applySettings(activeViewerSettings);
+    if (positionBeforeWritingModeChange) restoreReadingPosition(positionBeforeWritingModeChange);
+    saveSettings();
+    updateReadingState();
+    requestAnimationFrame(() => {
+      updateReadingState();
+      executeSavePosition();
+    });
+  }
+
+  btnThemeToggle.addEventListener('click', () => {
+    const previousTheme = activeViewerSettings.theme === 'dark' ? 'dark' : 'light';
+    const nextTheme = previousTheme === 'dark' ? 'light' : 'dark';
+    const paletteKeys = ['bgColor', 'narrationColor', 'dialogueColor', 'panelColor'];
+
+    // Theme defaults are migrated together. Values customized by the user are
+    // retained, while values still matching the old palette follow the new one.
+    for (const key of paletteKeys) {
+      const previousDefault = THEME_PALETTES[previousTheme][key];
+      const nextDefault = THEME_PALETTES[nextTheme][key];
+      const currentValue = activeViewerSettings[key];
+      if (typeof currentValue === 'string' &&
+          currentValue.toLowerCase() === previousDefault.toLowerCase()) {
+        activeViewerSettings[key] = nextDefault;
+      }
+    }
+
+    themeDerivedColors = { ...THEME_PALETTES[nextTheme] };
+    if (activeViewerSettings.autoSync && lastLoadedImageElement) {
+      analyzeImageAndComputeAuto(lastLoadedImageElement);
+    }
+    updateSetting('theme', nextTheme);
+  });
+  btnOpenHelp.addEventListener('click', () => shortcutModal.showModal());
+  btnCloseHelp.addEventListener('click', () => shortcutModal.close());
+  shortcutModal.addEventListener('click', event => {
+    if (event.target === shortcutModal) shortcutModal.close();
+  });
+
+  writingModeControl.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-value]');
+    if (!button || !writingModeControl.contains(button)) return;
+    updateSetting('writingMode', button.dataset.value);
+  });
+
+  ctrlFont.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-value]');
+    if (!button || !ctrlFont.contains(button)) return;
+    updateSetting('fontFamily', button.dataset.value);
+  });
+
+  const rangeSettingControls = [
+    [fontSizeControl, 'fontSize', valFontSize, value => `${value}px`],
+    [lineHeightControl, 'lineHeight', valLineHeight, value => Number(value).toFixed(1)],
+    [letterSpacingControl, 'letterSpacing', valLetterSpacing, value => `${Number(value).toFixed(2)}em`],
+    [rubyScaleControl, 'rubyScale', valRubyScale, value => `${Math.round(Number(value) * 100)}%`],
+    [contentBackgroundOpacityControl, 'panelBgAlpha', valContentBgAlpha, value => `${Math.round(Number(value) * 100)}%`]
+    ,[contentWidthControl, 'contentWidth', valContentWidth, value => `${value}px`]
+    ,[contentPaddingControl, 'contentPadding', valContentPadding, value => `${value}px`]
+    ,[backgroundBlurControl, 'backgroundBlur', valBackgroundBlur, value => `${value}px`]
+  ];
+  rangeSettingControls.forEach(([control, key, valueElement, format]) => {
+    control.addEventListener('input', () => {
+      const value = Number(control.value);
+      valueElement.textContent = format(value);
+      updateSetting(key, value);
+    });
+  });
+
+  [
+    [ctrlBgColor, 'bgColor'],
+    [ctrlNarrationColor, 'narrationColor'],
+    [ctrlDialogueColor, 'dialogueColor'],
+    [ctrlPanelColor, 'panelColor']
+  ].forEach(([control, key]) => {
+    control.addEventListener('input', () => updateSetting(key, control.value));
+  });
+
+  automaticColorSyncControl.addEventListener('change', () => {
+    if (automaticColorSyncControl.checked && lastLoadedImageElement) {
+      analyzeImageAndComputeAuto(lastLoadedImageElement);
+    }
+    updateSetting('autoSync', automaticColorSyncControl.checked);
+  });
+
+  readingProgressVisibilityControl.addEventListener('change', () => {
+    updateSetting('showProgress', readingProgressVisibilityControl.checked);
+  });
+  wakeLockControl.addEventListener('change', () => {
+    updateSetting('wakeLock', wakeLockControl.checked);
+  });
+
+  function collectTableOfContentsEntries() {
+    const headingEls = Array.from(novelContentElement.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+    tableOfContentsEntries = headingEls.map((el, idx) => {
+      const id = `heading-${idx}`;
+      el.id = id;
+      return {
+        id,
+        level: Number(el.tagName.substring(1)),
+        text: el.textContent.trim(),
+        element: el
+      };
+    });
+    renderTableOfContents();
+  }
+
+  function renderTableOfContents() {
+    tocListEl.innerHTML = '';
+    if (tableOfContentsEntries.length === 0) {
+      const empty = document.createElement('li');
+      empty.className = 'toc-empty';
+      empty.textContent = '見出しが見つかりませんでした';
+      tocListEl.appendChild(empty);
+      return;
+    }
+
+    tableOfContentsEntries.forEach(item => {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'toc-item';
+      btn.dataset.targetId = item.id;
+      btn.dataset.level = String(item.level);
+      btn.textContent = item.text;
+      if (item.id === activeTableOfContentsEntryId) {
+        btn.classList.add('is-current');
+      }
+      btn.addEventListener('click', () => {
+        item.element.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'start' });
+        closeAllDrawers();
+      });
+      li.appendChild(btn);
+      tocListEl.appendChild(li);
+    });
+  }
+
+  function updateActiveTableOfContentsEntry(newHeadingId) {
+    if (activeTableOfContentsEntryId === newHeadingId) return;
+    activeTableOfContentsEntryId = newHeadingId;
+    tocListEl.querySelectorAll('.toc-item').forEach(btn => {
+      btn.classList.toggle('is-current', btn.dataset.targetId === activeTableOfContentsEntryId);
+    });
+  }
+
+  function computeProgressRatio() {
+    const isVertical = activeViewerSettings.writingMode === 'vertical';
+    const maxScroll = isVertical
+      ? viewerContainer.scrollWidth - viewerContainer.clientWidth
+      : viewerContainer.scrollHeight - viewerContainer.clientHeight;
+    if (!Number.isFinite(maxScroll) || maxScroll <= 0) return 0;
+
+    const currentScroll = isVertical
+      ? Math.abs(viewerContainer.scrollLeft)
+      : viewerContainer.scrollTop;
+    return Math.min(1, Math.max(0, currentScroll / maxScroll));
+  }
+
+  function findCurrentReadingContext() {
+    const isVertical = activeViewerSettings.writingMode === 'vertical';
+    const containerRect = viewerContainer.getBoundingClientRect();
+
+    let currentHeading = tableOfContentsEntries.length > 0 ? tableOfContentsEntries[0].id : null;
+    for (const h of tableOfContentsEntries) {
+      const rect = h.element.getBoundingClientRect();
+      if (!isVertical) {
+        if (rect.top <= containerRect.top) {
+          currentHeading = h.id;
+        } else {
+          break;
+        }
+      } else {
+        if (rect.right >= containerRect.right) {
+          currentHeading = h.id;
+        } else {
+          break;
+        }
+      }
+    }
+
+    const blocks = Array.from(novelContentElement.querySelectorAll('p, h1, h2, h3, h4, h5, h6, img'));
+    let lineIndex = 0;
+    for (let i = 0; i < blocks.length; i++) {
+      const rect = blocks[i].getBoundingClientRect();
+      if (!isVertical) {
+        if (rect.bottom >= containerRect.top + 10) {
+          lineIndex = i;
+          break;
+        }
+      } else {
+        if (rect.left <= containerRect.right - 10) {
+          lineIndex = i;
+          break;
+        }
+      }
+    }
+
+    return { currentHeading, lineIndex };
+  }
+
+  function executeSavePosition() {
+    if (isRestoringReadingPosition || changingSavedData) return;
+    // Exported HTML also persists reading position in this browser's LocalStorage;
+    // position data is never serialized into the exported HTML file itself.
+    try {
+      localStorage.setItem(getPositionStorageKey(), JSON.stringify(captureReadingPosition()));
+    } catch (err) {
+      console.error('読書位置を保存できませんでした。ブラウザーの保存領域・プライベートモード・容量制限を確認してください。', err);
+    }
+  }
+
+  function captureReadingPosition() {
+    const ratio = computeProgressRatio();
+    const { currentHeading, lineIndex } = findCurrentReadingContext();
+    return {
+      ratio,
+      progressRatio: ratio,
+      scrollTop: viewerContainer.scrollTop,
+      scrollLeft: viewerContainer.scrollLeft,
+      headingId: currentHeading,
+      lineIndex,
+      writingMode: activeViewerSettings.writingMode,
+      bgOffsetX: backgroundMediaOffsetX,
+      bgOffsetY: backgroundMediaOffsetY,
+      savedAt: Date.now()
+    };
+  }
+
+  function saveBackgroundPosition() {
+    try {
+      const raw = localStorage.getItem(getPositionStorageKey());
+      const positionData = raw ? JSON.parse(raw) : {};
+      positionData.bgOffsetX = backgroundMediaOffsetX;
+      positionData.bgOffsetY = backgroundMediaOffsetY;
+      localStorage.setItem(getPositionStorageKey(), JSON.stringify(positionData));
+    } catch (_) {}
+  }
+
+  function updateReadingState() {
+    const ratio = computeProgressRatio();
+    const percentInt = Math.round(ratio * 100);
+    progressIndicator.textContent = `${percentInt}%`;
+
+    const { currentHeading } = findCurrentReadingContext();
+    updateActiveTableOfContentsEntry(currentHeading);
+
+  }
+
+  function restoreReadingPosition(position = null) {
+    let raw;
+    if (!position) {
+      try { raw = localStorage.getItem(getPositionStorageKey()); } catch (err) {
+        console.warn('保存済み読書位置を読み出せませんでした:', err);
+        return;
+      }
+      if (!raw) return;
+    }
+
+    try {
+      const pos = position ?? JSON.parse(raw);
+      const isVertical = activeViewerSettings.writingMode === 'vertical';
+      if (pos.writingMode === activeViewerSettings.writingMode) {
+        viewerContainer.scrollTop = Number.isFinite(pos.scrollTop) ? pos.scrollTop : 0;
+        viewerContainer.scrollLeft = Number.isFinite(pos.scrollLeft) ? pos.scrollLeft : 0;
+        return;
+      }
+      const block = Number.isInteger(pos.lineIndex)
+        ? novelContentElement.querySelectorAll('p, h1, h2, h3, h4, h5, h6, img')[pos.lineIndex]
+        : null;
+      if (block) {
+        block.scrollIntoView({ behavior: 'auto', block: 'start', inline: 'start' });
+      } else if (typeof (pos.progressRatio ?? pos.ratio) === 'number') {
+        const ratio = Math.min(1, Math.max(0, pos.progressRatio ?? pos.ratio));
+        if (!isVertical) {
+          viewerContainer.scrollTop = (viewerContainer.scrollHeight - viewerContainer.clientHeight) * ratio;
+        } else {
+          const maxScroll = viewerContainer.scrollWidth - viewerContainer.clientWidth;
+          viewerContainer.scrollLeft = -maxScroll * ratio;
+        }
+      }
+    } catch (err) {
+      console.warn('保存済み読書位置を復元できませんでした:', err);
+    }
+  }
+
+  async function restoreReadingPositionAfterLayout() {
+    const images = Array.from(novelContentElement.querySelectorAll('img'));
+    await Promise.all(images.map(img => {
+      if (img.complete) return Promise.resolve();
+      if (typeof img.decode === 'function') return img.decode().catch(() => {});
+      return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
+    }));
+    if (document.fonts && document.fonts.ready) await document.fonts.ready.catch(() => {});
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    isRestoringReadingPosition = true;
+    restoreReadingPosition();
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    isRestoringReadingPosition = false;
+    executeSavePosition();
+  }
+
+  function openSettingsDrawer() {
+    tocDrawer.classList.remove('is-open');
+    settingsDrawer.classList.add('is-open');
+  }
+
+  function openTocDrawer() {
+    settingsDrawer.classList.remove('is-open');
+    tocDrawer.classList.add('is-open');
+    const currentBtn = tocListEl.querySelector('.toc-item.is-current');
+    if (currentBtn) {
+      currentBtn.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function closeAllDrawers() {
+    settingsDrawer.classList.remove('is-open');
+    tocDrawer.classList.remove('is-open');
+  }
+
+  function getPageScrollDelta(writingMode, key, shiftKey, page) {
+    const vertical = writingMode === 'vertical';
+    if (!vertical && key === 'ArrowDown') return page / 3;
+    if (!vertical && key === 'ArrowUp') return -page / 3;
+    if (vertical && key === 'ArrowLeft') return -page / 3;
+    if (vertical && key === 'ArrowRight') return page / 3;
+    if (key === 'PageDown' || (key === ' ' && !shiftKey)) return vertical ? -page : page;
+    if (key === 'PageUp' || (key === ' ' && shiftKey)) return vertical ? page : -page;
+    return null;
+  }
+
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch (_) {
+      // ブラウザーや埋め込み環境がフルスクリーンを許可しない場合は通常表示を継続する。
+    }
+  }
+
+  btnOpenSettings.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openSettingsDrawer();
+  });
+
+  btnCloseSettings.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeAllDrawers();
+  });
+
+  btnOpenToc.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openTocDrawer();
+  });
+
+  btnCloseToc.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeAllDrawers();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeAllDrawers();
+    if (e.key === 'F1') { e.preventDefault(); shortcutModal.showModal(); return; }
+    if (e.key === 'F11') { e.preventDefault(); toggleFullscreen(); return; }
+    if (e.target.closest('input, textarea, select, button, a')) return;
+    if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 's') { e.preventDefault(); openSettingsDrawer(); return; }
+    if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'o') { e.preventDefault(); openTocDrawer(); return; }
+    const vertical = activeViewerSettings.writingMode === 'vertical';
+    const page = viewerContainer[vertical ? 'clientWidth' : 'clientHeight'] * 0.75;
+    let delta = getPageScrollDelta(activeViewerSettings.writingMode, e.key, e.shiftKey, page);
+    if (e.key === 'Home') { e.preventDefault(); if (vertical) viewerContainer.scrollTo({ left: 0, behavior: 'auto' }); else viewerContainer.scrollTo({ top: 0, behavior: 'auto' }); return; }
+    else if (e.key === 'End') { e.preventDefault(); if (vertical) viewerContainer.scrollTo({ left: -viewerContainer.scrollWidth, behavior: 'auto' }); else viewerContainer.scrollTo({ top: viewerContainer.scrollHeight, behavior: 'auto' }); return; }
+    if (delta === null) return;
+    e.preventDefault();
+    if (heldScrollTimer || heldScrollWaiting) return;
+    heldScrollDelta = delta;
+    heldScrollVertical = vertical;
+    const axis = vertical ? 'left' : 'top';
+    viewerContainer.scrollBy({ [axis]: delta, behavior: 'smooth' });
+    heldScrollWaiting = true;
+    const startHeldScroll = () => {
+      if (!heldScrollWaiting) return;
+      heldScrollWaiting = false;
+      if (heldScrollFallback) { clearTimeout(heldScrollFallback); heldScrollFallback = null; }
+      heldScrollTimer = window.setInterval(() => {
+        viewerContainer.scrollBy({ [heldScrollVertical ? 'left' : 'top']: heldScrollDelta, behavior: 'auto' });
+      }, 40);
+    };
+    viewerContainer.addEventListener('scrollend', startHeldScroll, { once: true, passive: true });
+    heldScrollFallback = window.setTimeout(startHeldScroll, 600);
+  });
+
+  document.addEventListener('keyup', event => {
+    if ((heldScrollTimer || heldScrollWaiting) && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', ' '].includes(event.key)) {
+      stopHeldScroll();
+    }
+  });
+  window.addEventListener('blur', () => {
+    stopHeldScroll();
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!settingsDrawer.classList.contains('is-open') && !tocDrawer.classList.contains('is-open')) return;
+    if (e.target.closest('.drawer-panel') || e.target.closest('#btn-open-settings')) return;
+    closeAllDrawers();
+  });
+
+  let isDraggingBg = false;
+  let startX = 0;
+  let startY = 0;
+  let initialOffsetX = 0;
+  let initialOffsetY = 0;
+
+  function startDrag(clientX, clientY, target) {
+    if (shortcutModal.open) return false;
+    if (!backgroundMediaDataUrl) return false;
+    if (target.closest('.drawer-panel') || target.closest('#btn-open-settings') || target.closest('#novel-content')) {
+      return false;
+    }
+    isDraggingBg = true;
+    bgViewportIndicator.classList.add('is-visible');
+    updateBackgroundViewportIndicator();
+    startX = clientX;
+    startY = clientY;
+    initialOffsetX = backgroundMediaOffsetX;
+    initialOffsetY = backgroundMediaOffsetY;
+    return true;
+  }
+
+  function moveDrag(clientX, clientY) {
+    if (!isDraggingBg) return;
+    const dx = clientX - startX;
+    const dy = clientY - startY;
+    backgroundMediaOffsetX = initialOffsetX + dx;
+    backgroundMediaOffsetY = initialOffsetY + dy;
+    updateBackgroundPosition();
+    saveBackgroundPosition();
+  }
+
+  function endDrag() {
+    isDraggingBg = false;
+    bgViewportIndicator.classList.remove('is-visible');
+  }
+
+  document.body.addEventListener('dblclick', (e) => {
+    if (shortcutModal.open) return;
+    if (!backgroundMediaDataUrl) return;
+    if (e.target.closest('.drawer-panel') || e.target.closest('#btn-open-settings') || e.target.closest('#novel-content')) return;
+
+    backgroundMediaOffsetX = 0;
+    backgroundMediaOffsetY = 0;
+    updateBackgroundPosition();
+    saveBackgroundPosition();
+    e.preventDefault();
+  });
+
+  document.body.addEventListener('mousedown', (e) => {
+    if (startDrag(e.clientX, e.clientY, e.target)) e.preventDefault();
+  });
+  window.addEventListener('mousemove', (e) => moveDrag(e.clientX, e.clientY));
+  window.addEventListener('mouseup', endDrag);
+  window.addEventListener('resize', updateBackgroundPosition);
+
+  document.body.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+      startDrag(e.touches[0].clientX, e.touches[0].clientY, e.target);
+    }
+  }, { passive: true });
+
+  window.addEventListener('touchmove', (e) => {
+    if (isDraggingBg && e.touches.length === 1) {
+      moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }, { passive: true });
+
+  window.addEventListener('touchend', endDrag);
+  window.addEventListener('touchcancel', endDrag);
+
+  document.body.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    document.body.classList.add('drag-over');
+  });
+
+  document.body.addEventListener('dragleave', () => {
+    document.body.classList.remove('drag-over');
+  });
+
+  document.body.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    document.body.classList.remove('drag-over');
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      await handleFiles(Array.from(e.dataTransfer.files));
+    }
+  });
+
+  async function validateImageFile(file) {
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const image = new Image();
+      image.src = objectUrl;
+      if (typeof image.decode === 'function') {
+        await image.decode();
+      } else {
+        await new Promise((resolve, reject) => {
+          image.onload = resolve;
+          image.onerror = () => reject(new Error('画像データをデコードできません。'));
+        });
+      }
+      if (!image.naturalWidth || !image.naturalHeight) {
+        throw new Error('画像の幅または高さを取得できません。');
+      }
+      return { width: image.naturalWidth, height: image.naturalHeight };
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
+  async function validateVideoFile(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.src = url;
+      await new Promise((resolve, reject) => {
+        video.onloadedmetadata = resolve;
+        video.onerror = () => reject(new Error('動画のメタデータを読み込めません。'));
+      });
+      if (!video.videoWidth || !video.videoHeight) throw new Error('動画の寸法を取得できません。');
+    } finally { URL.revokeObjectURL(url); }
+  }
+
+  function getImportFailureReason(error, fallback) {
+    if (error?.name === 'QuotaExceededError') return 'ブラウザーの保存領域が不足しているため、元ファイルを保存できません。';
+    return error?.message || fallback;
+  }
+
+  async function handleFiles(files) {
+    let combinedHtml = '';
+    const failedKinds = new Set();
+    const failedFiles = [];
+    for (const file of files) {
+      const isImage = file.type.startsWith('image/') || /\.(png|apng|jpg|jpeg|webp|gif|bmp|svg)$/i.test(file.name);
+      const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|ogv|ogg|mov|m4v)$/i.test(file.name);
+      const isText = /\.(txt|md|markdown|html|htm)$/i.test(file.name) || file.type === 'text/plain' || file.type === 'text/markdown' || file.type === 'text/html';
+      if (isImage || isVideo) {
+        try {
+          const mediaType = isVideo ? 'video' : 'image';
+           if (mediaType === 'image') await validateImageFile(file);
+           else await validateVideoFile(file);
+          await storeBackgroundMedia(file, mediaType);
+          const objectUrl = URL.createObjectURL(file);
+          backgroundMediaFileBlob = file.slice(0, file.size, file.type || 'application/octet-stream');
+          backgroundMediaFileExtension = getFileExtension(file.name);
+          applyBackgroundImage(objectUrl, false, mediaType);
+          refreshExportButtons();
+        } catch (err) {
+          console.error('背景メディアの読み込みに失敗しました:', err);
+          failedKinds.add('media');
+          failedFiles.push(`${file.name}: ${getImportFailureReason(err, 'メディアを読み込めません')}`);
+        }
+      } else if (isText) {
+        try {
+          const text = await readTextFile(file);
+          let content;
+          let title = '';
+          if (/\.html?$/i.test(file.name)) {
+            const doc = new DOMParser().parseFromString(text, 'text/html');
+            const article = doc.querySelector('#novel-content') || doc.body;
+            title = doc.title.trim();
+            content = sanitizeHTML(article.innerHTML);
+          } else {
+            content = sanitizeHTML(plainTextToSafeHTML(text));
+          }
+          const blob = file.slice(0, file.size, file.type || 'text/plain');
+          const extension = getFileExtension(file.name);
+          await storeImportedText(blob, extension);
+          importedTextFileBlob = blob;
+          importedTextFileExtension = extension;
+          activeViewerSettings.fileStem = getFileStem(file.name);
+          activeViewerSettings.documentTitle = title;
+          combinedHtml += (combinedHtml ? '<hr>' : '') + content;
+          refreshExportButtons();
+        } catch (err) {
+          console.error('テキストファイルの読み込みに失敗しました:', err);
+          failedKinds.add('text');
+          failedFiles.push(`${file.name}: ${getImportFailureReason(err, 'テキストを読み込めません')}`);
+        }
+      } else {
+        failedKinds.add('unsupported');
+        failedFiles.push(`${file.name}: 対応していない形式です`);
+      }
+    }
+
+    if (combinedHtml.trim()) {
+      novelContentElement.innerHTML = combinedHtml;
+      try {
+        localStorage.setItem(STORAGE_KEYS.CONTENT, combinedHtml);
+        localStorage.removeItem(getPositionStorageKey());
+      } catch (_) {}
+      viewerContainer.scrollTop = 0;
+      viewerContainer.scrollLeft = 0;
+      collectTableOfContentsEntries();
+      updateReadingState();
+    }
+    applySettings(activeViewerSettings);
+    saveSettings();
+    closeAllDrawers();
+    if (failedKinds.size) {
+      const reasons = [];
+      if (failedKinds.has('unsupported')) reasons.push('対応していないファイル形式です。');
+      if (failedKinds.has('text')) reasons.push('テキストを読み込めませんでした。ファイルの破損やアクセス権を確認してください。');
+      if (failedKinds.has('media')) reasons.push('画像・動画を読み込めませんでした。形式やファイルの破損、保存領域を確認してください。');
+      showErrorNotice(`${reasons.join(' ')} ${failedFiles.join(' / ')}`);
+    }
+  }
+
+  btnImportFile.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', async (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      await handleFiles(Array.from(e.target.files));
+    }
+    fileInput.value = '';
+  });
+
+  loadedFileDownloads.addEventListener('click', async (event) => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    const deleteType = getRuntimeDataDeleteType(button);
+    try {
+      if (deleteType) {
+        const type = deleteType;
+        const exported = document.documentElement.dataset.exported === 'true';
+        if (type === 'text') {
+          const nextSettings = { ...activeViewerSettings, fileStem: '', documentTitle: '' };
+          const changes = [[getPositionStorageKey(), null]];
+          if (!exported) changes.push([STORAGE_KEYS.CONTENT, null], [STORAGE_KEYS.SETTINGS, JSON.stringify(nextSettings)]);
+          if (!await changeSavedData(changes, exported ? [] : [TEXT_STORE_KEY])) return;
+          importedTextFileBlob = null; importedTextFileExtension = '';
+          activeViewerSettings.fileStem = '';
+          activeViewerSettings.documentTitle = '';
+          novelContentElement.innerHTML = getViewerResetDefaults().content;
+          viewerContainer.scrollTop = 0;
+          viewerContainer.scrollLeft = 0;
+          collectTableOfContentsEntries();
+          updateReadingState();
+          applySettings(activeViewerSettings);
+        } else if (type === 'image' || type === 'video') {
+          if (!await changeSavedData([], exported ? [] : [MEDIA_STORE_KEY])) return;
+          backgroundMediaFileBlob = null; backgroundMediaFileExtension = '';
+          if (backgroundMediaType === type) applyBackgroundImage(null);
+          applySettings(activeViewerSettings);
+        }
+        refreshExportButtons();
+        return;
+      }
+      if (button.id === 'btn-download-text') await downloadWithHash(importedTextFileBlob, importedTextFileExtension, '.txt');
+      else if (button.id === 'btn-download-image') await downloadWithHash(backgroundMediaFileBlob, backgroundMediaFileExtension, '.img');
+      else if (button.id === 'btn-download-video') await downloadWithHash(backgroundMediaFileBlob, backgroundMediaFileExtension, '.mp4');
+    } catch (err) {
+      if (deleteType) {
+        reportOperationFailure('元ファイルの削除', err);
+        return;
+      }
+      const label = button.id === 'btn-download-text' ? 'テキスト' : button.id === 'btn-download-image' ? '画像' : '動画';
+      reportOperationFailure(`${label}のダウンロード`, err);
+    }
+  });
+
+  btnExportHtml.addEventListener('click', async () => {
+    closeAllDrawers();
+    let downloadUrl = null;
+    try {
+
+      let exportMediaDataUrl = null;
+      let exportMediaType = document.body.classList.contains('video-bg') ? 'video' : backgroundMediaType;
+      if (isMediaType(backgroundMediaType)) {
+        const savedMedia = await loadBackgroundMedia();
+        if (backgroundMediaFileBlob instanceof Blob) {
+          exportMediaDataUrl = await blobToDataUrl(backgroundMediaFileBlob);
+        } else if (savedMedia && savedMedia.blob instanceof Blob) {
+          exportMediaDataUrl = await blobToDataUrl(savedMedia.blob);
+          exportMediaType = savedMedia.mediaType === 'video' ? 'video' : 'image';
+        } else if (backgroundMediaObjectUrl) {
+          const response = await fetch(backgroundMediaObjectUrl);
+          if (!response.ok) throw new Error('背景メディアを読み出せませんでした。');
+          exportMediaDataUrl = await blobToDataUrl(await response.blob());
+        } else if (backgroundMediaDataUrl && backgroundMediaDataUrl.startsWith('data:')) {
+          exportMediaDataUrl = backgroundMediaDataUrl;
+        }
+        if (exportMediaDataUrl && exportMediaDataUrl.startsWith('blob:')) {
+          const response = await fetch(exportMediaDataUrl);
+          if (!response.ok) throw new Error('背景メディアをData URLへ変換できませんでした。');
+          exportMediaDataUrl = await blobToDataUrl(await response.blob());
+        }
+        if (!isEmbeddableMediaDataUrl(exportMediaDataUrl, exportMediaType)) {
+          throw new Error('背景メディアのデータを取得できませんでした。');
+        }
+      }
+
+      const clonedDoc = document.documentElement.cloneNode(true);
+      clonedDoc.querySelectorAll('.drawer-panel').forEach(el => el.classList.remove('is-open'));
+
+      const configScript = clonedDoc.querySelector('#viewer-initial-config');
+      if (configScript) configScript.textContent = '\n' + JSON.stringify(activeViewerSettings, null, 2) + '\n';
+
+      const resetDefaults = document.createElement('script');
+      resetDefaults.type = 'application/json';
+      resetDefaults.id = 'viewer-reset-defaults';
+      resetDefaults.textContent = JSON.stringify(getViewerResetDefaults());
+
+      const clonedHead = clonedDoc.querySelector('head');
+      if (!clonedHead) throw new Error('エクスポート先のhead要素が見つかりません。');
+      // The executable viewer script runs before the end of body. Embedded
+      // payloads must therefore be placed in head so init() can read them.
+      clonedHead.appendChild(resetDefaults);
+
+      const downloadData = document.createElement('script');
+      downloadData.type = 'application/json';
+      downloadData.id = 'viewer-download-data';
+      clonedDoc.querySelector('#viewer-download-data')?.remove();
+      const textBase64 = importedTextFileBlob ? arrayBufferToBase64(await importedTextFileBlob.arrayBuffer()) : '';
+      downloadData.textContent = JSON.stringify(createEmbeddedDownloadData(textBase64, importedTextFileExtension, importedTextFileBlob ? importedTextFileBlob.type : '', exportMediaDataUrl, exportMediaType, backgroundMediaFileExtension));
+      clonedHead.appendChild(downloadData);
+
+      clonedDoc.setAttribute('data-theme', activeViewerSettings.theme);
+      clonedDoc.setAttribute('data-writing-mode', activeViewerSettings.writingMode);
+      clonedDoc.dataset.exported = 'true';
+      clonedDoc.dataset.documentId = makeDocumentId(`${activeViewerSettings.fileStem}\n${novelContentElement.innerHTML}`);
+      
+      delete clonedDoc.dataset.bgOffsetX;
+      delete clonedDoc.dataset.bgOffsetY;
+      clonedDoc.style.setProperty('--bg-pos-x', '50%');
+      clonedDoc.style.setProperty('--bg-pos-y', '50%');
+
+      const fileStem = resolveDocumentTitle('', activeViewerSettings.fileStem, 'Hitohira');
+      const clonedHeadTitle = clonedDoc.querySelector('head > title');
+      if (clonedHeadTitle) clonedHeadTitle.textContent = activeViewerSettings.documentTitle || fileStem;
+
+      const exportedContentEl = clonedDoc.querySelector('#novel-content');
+      if (exportedContentEl) exportedContentEl.innerHTML = sanitizeHTML(novelContentElement.innerHTML);
+
+      // Background media is restored exclusively from viewer-download-data
+      // during init(); clear the source document's background styles and state.
+      clonedDoc.style.removeProperty('background-image');
+      clonedDoc.style.removeProperty('--bg-image');
+      const clonedBody = clonedDoc.querySelector('body');
+      clonedBody.style.removeProperty('background-image');
+      clonedBody.classList.remove('has-bg', 'video-bg');
+      const clonedVideo = clonedDoc.querySelector('#background-video');
+      if (clonedVideo) {
+        clonedVideo.removeAttribute('src');
+        clonedVideo.removeAttribute('autoplay');
+        clonedVideo.removeAttribute('muted');
+        clonedVideo.removeAttribute('loop');
+        clonedVideo.removeAttribute('playsinline');
+      }
+
+      const htmlString = '<!DOCTYPE html>\n' + clonedDoc.outerHTML;
+      const exportFileName = `${fileStem}.html`;
+      const blob = new Blob([htmlString], { type: 'text/html;charset=utf-8' });
+      downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = exportFileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      reportOperationFailure('HTMLのエクスポート', err);
+    } finally {
+      if (downloadUrl) setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    }
+  });
+
+  function readEmbeddedResetDefaults(element, fallbackSettings, fallbackContent) {
+    if (!element) return { settings: fallbackSettings, content: fallbackContent };
+    try {
+      const data = JSON.parse(element.textContent);
+      return { settings: data.settings || fallbackSettings, content: typeof data.content === 'string' ? data.content : fallbackContent };
+    } catch (_) { return { settings: fallbackSettings, content: fallbackContent }; }
+  }
+
+  function getViewerResetDefaults() {
+    if (viewerResetDefaults) return viewerResetDefaults;
+    const element = document.documentElement.dataset.exported === 'true'
+      ? document.getElementById('viewer-reset-defaults')
+      : null;
+    viewerResetDefaults = readEmbeddedResetDefaults(element, DEFAULT_SETTINGS, initialNovelContentHtml);
+    return viewerResetDefaults;
+  }
+
+  btnResetAll.addEventListener('click', async () => {
+    const isExportedDocument = document.documentElement.dataset.exported === 'true';
+    const { settings: resetSettings, content: resetContent } = getViewerResetDefaults();
+    const changes = [[getPositionStorageKey(), null]];
+    if (!isExportedDocument) {
+      changes.push([STORAGE_KEYS.SETTINGS, null], [STORAGE_KEYS.CONTENT, null]);
+    }
+    try {
+      const mediaKeys = isExportedDocument ? [] : [MEDIA_STORE_KEY, TEXT_STORE_KEY];
+      if (!await changeSavedData(changes, mediaKeys)) return;
+    } catch (error) {
+      reportOperationFailure('設定の初期化', error);
+      return;
+    }
+
+    activeViewerSettings = { ...resetSettings };
+    importedTextFileBlob = null;
+    importedTextFileExtension = '';
+    backgroundMediaFileBlob = null;
+    backgroundMediaFileExtension = '';
+    refreshExportButtons();
+    themeDerivedColors = { ...THEME_PALETTES.light };
+    novelContentElement.innerHTML = resetContent;
+    applyBackgroundImage(null);
+
+    applySettings(activeViewerSettings);
+    collectTableOfContentsEntries();
+
+    viewerContainer.scrollTop = 0;
+    viewerContainer.scrollLeft = 0;
+    updateReadingState();
+    closeAllDrawers();
+  });
+
+  // 本文クリックによるページ送り。
+  let pendingPageTurnTimer = null;
+
+  const hasActiveTextSelection = () => {
+    const selection = window.getSelection();
+    return !!selection && !selection.isCollapsed && selection.rangeCount > 0;
+  };
+
+  window.addEventListener('click', event => {
+    if (!novelContentElement.contains(event.target)) {
+      return;
+    }
+    // Double-click selection belongs to the browser. Do not clear the range
+    // or perform page turning for the second click of the gesture.
+    if (event.detail >= 2) {
+      if (pendingPageTurnTimer) {
+        clearTimeout(pendingPageTurnTimer);
+        pendingPageTurnTimer = null;
+      }
+      event.stopPropagation();
+      return;
+    }
+    if (hasActiveTextSelection()) {
+      // ブラウザーが作成したテキスト選択は維持し、ページ送りだけ抑止する。
+      event.preventDefault();
+      return;
+    }
+    if (event.target.closest('a, button, input, textarea, select, video, audio')) return;
+
+    const rect = viewerContainer.getBoundingClientRect();
+    const isVertical = activeViewerSettings.writingMode === 'vertical';
+    const forward = isVertical
+      ? event.clientX < rect.left + rect.width / 2
+      : event.clientY >= rect.top + rect.height / 2;
+    if (pendingPageTurnTimer) clearTimeout(pendingPageTurnTimer);
+    pendingPageTurnTimer = window.setTimeout(() => {
+      pendingPageTurnTimer = null;
+      if (isVertical) {
+        const amount = viewerContainer.clientWidth * 0.75;
+        viewerContainer.scrollBy({ left: forward ? -amount : amount, behavior: 'smooth' });
+      } else {
+        const amount = viewerContainer.clientHeight * 0.75;
+        viewerContainer.scrollBy({ top: forward ? amount : -amount, behavior: 'smooth' });
+      }
+    }, 220);
+  });
+
+  novelContentElement.addEventListener('dblclick', event => {
+    if (pendingPageTurnTimer) {
+      clearTimeout(pendingPageTurnTimer);
+      pendingPageTurnTimer = null;
+    }
+  });
+
+  const handleReadingPositionChange = () => {
+    updateReadingState();
+    executeSavePosition();
+    updateResetButtonState();
+  };
+  viewerContainer.addEventListener('scroll', handleReadingPositionChange, { passive: true });
+  viewerContainer.addEventListener('scrollend', handleReadingPositionChange, { passive: true });
+
+  viewerContainer.addEventListener('keydown', event => {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) {
+      requestAnimationFrame(executeSavePosition);
+    }
+  });
+
+  viewerContainer.addEventListener('pointermove', (event) => {
+    let pointerIsOnTextLine = false;
+    let textNode = null;
+
+    if (document.caretRangeFromPoint) {
+      const caretRange = document.caretRangeFromPoint(event.clientX, event.clientY);
+      if (caretRange && caretRange.startContainer.nodeType === Node.TEXT_NODE) {
+        textNode = caretRange.startContainer;
+      }
+    } else if (document.caretPositionFromPoint) {
+      const caret = document.caretPositionFromPoint(event.clientX, event.clientY);
+      if (caret && caret.offsetNode && caret.offsetNode.nodeType === Node.TEXT_NODE) {
+        textNode = caret.offsetNode;
+      }
+    }
+
+    if (textNode && novelContentElement.contains(textNode)) {
+      const textLineRange = document.createRange();
+      textLineRange.selectNodeContents(textNode);
+      pointerIsOnTextLine = Array.from(textLineRange.getClientRects()).some(lineRect =>
+        event.clientX >= lineRect.left && event.clientX <= lineRect.right &&
+        event.clientY >= lineRect.top && event.clientY <= lineRect.bottom
+      );
+    }
+
+    viewerContainer.classList.toggle('text-hit', pointerIsOnTextLine);
+  });
+  viewerContainer.addEventListener('pointerleave', () => {
+    viewerContainer.classList.remove('text-hit');
+  });
+
+  window.addEventListener('resize', () => {
+    updateBackgroundPosition();
+    updateReadingState();
+  }, { passive: true });
+
+  window.addEventListener('beforeunload', executeSavePosition);
+  window.addEventListener('pagehide', executeSavePosition);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      executeSavePosition();
+    }
+    updateScreenWakeLock();
+  });
+
+  viewerContainer.addEventListener('wheel', (e) => {
+    if (activeViewerSettings.writingMode === 'vertical' && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      e.preventDefault();
+      viewerContainer.scrollLeft -= e.deltaY;
+    }
+  }, { passive: false });
+
+  function resolveInitialContent(savedContent) {
+    return typeof savedContent === 'string' && savedContent.trim() ? savedContent : null;
+  }
+
+  function readEmbeddedDownloadData(element) {
+    if (!element) return null;
+    try {
+      const data = JSON.parse(element.textContent);
+      return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
+    } catch (_) { return null; }
+  }
+
+  function reportEmbeddedDownloadError(error) {
+    console.warn('エクスポートデータを復元できませんでした:', error);
+    backgroundMediaFileBlob = null;
+    backgroundMediaFileExtension = '';
+    applyBackgroundImage(null);
+    showErrorNotice('エクスポートHTMLの内蔵データを復元できませんでした。');
+  }
+
+  async function init() {
+    const isExportedDocument = document.documentElement.dataset.exported === 'true';
+    currentDocumentId = isExportedDocument
+      ? (document.documentElement.dataset.documentId || 'exported')
+      : 'default';
+    try {
+      const savedSettings = isExportedDocument ? null : localStorage.getItem(STORAGE_KEYS.SETTINGS);
+      if (savedSettings) activeViewerSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(savedSettings) };
+    } catch (_) {
+      activeViewerSettings = { ...DEFAULT_SETTINGS };
+    }
+    if (isExportedDocument) activeViewerSettings.wakeLock = false;
+    themeDerivedColors = { ...THEME_PALETTES[activeViewerSettings.theme] || THEME_PALETTES.light };
+
+    if (isExportedDocument) {
+      const downloadDataEl = document.getElementById('viewer-download-data');
+      try {
+        const data = readEmbeddedDownloadData(downloadDataEl);
+        if (!data) throw new Error('内蔵データが不正です。');
+        if (data.textBase64) {
+          const binary = atob(data.textBase64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          importedTextFileBlob = new Blob([bytes], { type: data.textMimeType || 'application/octet-stream' });
+          importedTextFileExtension = data.textExtension || '';
+        }
+        if (data.mediaIncluded || data.mediaDataUrl) {
+          if (!isMediaType(data.mediaType) || !isEmbeddableMediaDataUrl(data.mediaDataUrl, data.mediaType)) {
+            throw new Error('背景メディアの内蔵データが不正です。');
+          }
+          backgroundMediaFileBlob = dataUrlToBlob(data.mediaDataUrl);
+          backgroundMediaFileExtension = data.mediaExtension || '';
+          applyBackgroundImage(data.mediaDataUrl, false, data.mediaType, error => {
+            reportEmbeddedDownloadError(error);
+            refreshExportButtons();
+            applySettings(activeViewerSettings);
+            updateReadingState();
+          });
+        }
+      } catch (err) {
+        reportEmbeddedDownloadError(err);
+      }
+    } else {
+      try {
+        const savedMedia = await loadBackgroundMedia();
+        if (savedMedia && savedMedia.blob instanceof Blob) {
+          backgroundMediaFileBlob = savedMedia.blob;
+          backgroundMediaFileExtension = savedMedia.fileExtension || '';
+          backgroundMediaType = savedMedia.mediaType === 'video' ? 'video' : 'image';
+          const objectUrl = URL.createObjectURL(savedMedia.blob);
+          applyBackgroundImage(objectUrl, true, backgroundMediaType);
+        }
+        const savedText = await loadImportedText();
+        if (savedText && savedText.blob instanceof Blob) {
+          importedTextFileBlob = savedText.blob;
+          importedTextFileExtension = savedText.fileExtension || '';
+        }
+      } catch (_) {}
+    }
+    refreshExportButtons();
+
+    applySettings(activeViewerSettings);
+
+    const savedContent = isExportedDocument ? null : localStorage.getItem(STORAGE_KEYS.CONTENT);
+    const initialContent = resolveInitialContent(savedContent);
+    if (initialContent) novelContentElement.innerHTML = sanitizeHTML(initialContent);
+
+    collectTableOfContentsEntries();
+    await restoreReadingPositionAfterLayout();
+    updateReadingState();
+    updateResetButtonState();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
