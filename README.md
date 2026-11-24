@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./assets/hitohira-leaf.png" alt="Hitohiraの葉アイコン" width="88">
+</p>
+
 # Hitohira
 
 小説を1つのHTMLファイルで読むための単体型ビューアです。TXT・Markdown・HTMLの読み込み、縦書き・横書き、背景メディア、目次、読書位置の保存、HTMLエクスポートに対応しています。
