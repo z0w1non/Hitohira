@@ -10,7 +10,7 @@ description: Hitohiraの編集用HTMLから、実行時の圧縮器や復元コ�
 - 編集・開発対象はリポジトリ直下の`hitohira.html`とする。ソースHTMLへミニファイ機能や復元用辞書を埋め込まない。
 - 公開成果物は`public/hitohira.html`とし、`tools/generate_minified_viewer.js`で生成する。名前が同じでも、ルートの開発用`hitohira.html`と`public/hitohira.html`は別ファイルである。
 - `public/hitohira.html`は生成物として扱い、直接編集しない。
-- GitHubリポジトリのトップページに表示されるルート`README.md`から、公開用HTMLをワンクリックでダウンロードできるようにする。READMEのリンク先は`./public/hitohira.html`とする。
+- GitHubリポジトリのトップページに表示されるルート`README.md`から、GitHubのrawダウンロードURLで公開用HTMLを直接ダウンロードできるようにする。コード閲覧ページへの相対リンクにせず、READMEのダウンロード表示名は「Hitohiraをダウンロード」とする。
 
 ## ビルド手順
 

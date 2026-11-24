@@ -54,9 +54,9 @@ test('テスト基盤', 'テスト後の副作用を成否に関わらず除去�
 test('テスト基盤', '製品の実行時ネットワーク不要方針が仕様にある', () => {
   assert.ok(spec.includes('実行時にネットワーク接続を要求しない'));
 });
-test('公開用配布', 'GitHubのREADMEから生成済み公開HTMLへ直接移動できる', () => {
-  assert.match(readme, /\]\(\.\/public\/hitohira\.html\)/);
-  assert.match(readme, /ダウンロード/);
+test('公開用配布', 'GitHubのREADMEから公開HTMLを直接ダウンロードする', () => {
+  assert.match(readme, /\[Hitohiraをダウンロード\]\(https:\/\/github\.com\/z0w1non\/Hitohira\/raw\/refs\/heads\/master\/public\/hitohira\.html\?download=1\)/);
+  assert.doesNotMatch(readme, /\]\(\.\/public\/hitohira\.html\)/);
   assert.ok(fs.existsSync(path.join(__dirname, '..', 'public', 'hitohira.html')));
   assert.notEqual(path.resolve(__dirname, '..', 'hitohira.html'), path.resolve(__dirname, '..', 'public', 'hitohira.html'));
   assert.ok(spec.includes('GitHubリポジトリのトップページ'));
