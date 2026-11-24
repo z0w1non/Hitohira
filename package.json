@@ -1,0 +1,13 @@
+{
+  "name": "hitohira-novel-viewer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Development tools for building Hitohira's standalone public HTML.",
+  "scripts": {
+    "build:public": "node tools/generate_minified_viewer.js"
+  },
+  "devDependencies": {
+    "acorn": "8.19.0",
+    "terser": "5.51.4"
+  }
+}

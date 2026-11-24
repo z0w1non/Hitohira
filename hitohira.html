@@ -613,6 +613,7 @@ SOFTWARE.
   }
   .file-action-group { display: flex; align-items: center; gap: 6px; width: 100%; }
   .file-action-label { flex: 1 1 auto; min-width: 0; text-align: left; font-size: 12px; color: var(--text-primary); }
+  .file-action-size { flex: 0 0 auto; color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
   .file-icon-btn { width: 38px; flex: 0 0 38px; justify-content: center; padding-inline: 8px; }
   .file-delete-btn { width: 38px; flex: 0 0 38px; justify-content: center; padding-inline: 8px; }
 
@@ -761,7 +762,7 @@ SOFTWARE.
   }
 
 </style>
-<script type="text/javascript" nonce="e75ff3f65d834f5d8c01d6dd546" src="//local.adguard.org?ts=1795165695839&amp;type=content-script&amp;dmn=chatgpt.com&amp;url=https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Festuary%2Fcontent%3Fid%3Dfile_00000000c8808211be9facac672fba33%26fn%3Dnovel_viewer.html%26cd%3Dattachment%26ts%3D498658%26p%3Dfs%26cid%3D1%26sig%3D6c734264819c6a38860b16ba6e1d1bf958b2a8179fba6008bfa41b2dfd2573c7%26v%3D0&amp;app=chrome.exe&amp;css=2&amp;js=1&amp;rel=1&amp;rji=1&amp;sbe=1"></script><script type="text/javascript" nonce="e75ff3f65d834f5d8c01d6dd546" src="//local.adguard.org?ts=1795165695839&amp;name=AdGuard%20Extra&amp;name=AdGuard%20Popup%20Blocker&amp;type=user-script"></script></head>
+</head>
 <body>
   <div id="error-notice" role="alert" aria-live="assertive" hidden>
     <span id="error-notice-message"></span>
@@ -941,7 +942,7 @@ SOFTWARE.
       <div class="control-group" id="download-file-group">
           <div class="control-label"><span>エクスポート</span></div>
           <div class="action-btn-row" id="loaded-file-downloads" aria-label="読み込みファイルとHTMLのダウンロード">
-            <div class="file-action-group export-html-group"><span class="file-action-label">HTML</span><button type="button" class="action-btn file-icon-btn" id="btn-export-html" title="HTMLを書き出す" aria-label="HTMLを書き出す"><svg class="action-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m-5 5 5-5 5 5M4 17v3h16v-3" /></svg></button></div>
+            <div class="file-action-group export-html-group"><span class="file-action-label">HTML</span><span class="file-action-size" id="html-export-size" aria-live="polite">計算中</span><button type="button" class="action-btn file-icon-btn" id="btn-export-html" title="HTMLを書き出す" aria-label="HTMLを書き出す"><svg class="action-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m-5 5 5-5 5 5M4 17v3h16v-3" /></svg></button></div>
           </div>
       </div>
       <input type="file" id="file-input" accept=".txt,.html,.htm,image/png,image/apng,image/jpeg,image/webp,image/gif,image/bmp,image/svg+xml,video/*,.png,.apng,.jpg,.jpeg,.webp,.gif,.bmp,.svg" multiple hidden>
@@ -1361,6 +1362,22 @@ SOFTWARE.
     ];
   }
 
+  function formatFileSize(byteLength) {
+    if (!Number.isFinite(byteLength) || byteLength < 0) return '—';
+    if (byteLength < 1000) return `${byteLength} B`;
+    const units = ['KB', 'MB', 'GB', 'TB'];
+    let size = byteLength;
+    let unitIndex = -1;
+    do { size /= 1000; unitIndex++; } while (size >= 1000 && unitIndex < units.length - 1);
+    const digits = size >= 100 ? 0 : size >= 10 ? 1 : 2;
+    return `${Number(size.toFixed(digits))} ${units[unitIndex]}`;
+  }
+
+  function updateExportFileSize(element, byteLength) {
+    if (!element) return;
+    element.textContent = formatFileSize(byteLength);
+  }
+
   function getRuntimeDataDeleteType(button) {
     const type = button && button.dataset ? button.dataset.deleteType : '';
     return type === 'text' || type === 'image' || type === 'video' ? type : null;
@@ -1375,7 +1392,11 @@ SOFTWARE.
         existingGroup?.remove();
         continue;
       }
-      if (existingButton) continue;
+      if (existingButton) {
+        const blob = definition.id === 'btn-download-text' ? importedTextFileBlob : backgroundMediaFileBlob;
+        updateExportFileSize(existingGroup?.querySelector('.file-action-size'), blob.size);
+        continue;
+      }
       const group = document.createElement('div');
       group.className = 'file-action-group';
       const button = document.createElement('button');
@@ -1400,9 +1421,15 @@ SOFTWARE.
       deleteIcon.appendChild(deletePath); deleteButton.appendChild(deleteIcon);
       const label = document.createElement('span');
       label.className = 'file-action-label'; label.textContent = definition.label;
-      group.append(label, deleteButton, button);
+      const size = document.createElement('span');
+      size.className = 'file-action-size';
+      size.dataset.exportSizeFor = definition.id;
+      size.setAttribute('aria-label', `${definition.label}ファイルのサイズ`);
+      updateExportFileSize(size, definition.id === 'btn-download-text' ? importedTextFileBlob.size : backgroundMediaFileBlob.size);
+      group.append(label, size, deleteButton, button);
       loadedFileDownloads.appendChild(group);
     }
+    scheduleHtmlExportSizeUpdate();
   }
 
   async function downloadWithHash(blob, extension, fallbackExtension) {
@@ -1968,6 +1995,7 @@ SOFTWARE.
     try {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(activeViewerSettings));
     } catch (_) {}
+    scheduleHtmlExportSizeUpdate();
   }
 
   function updateSetting(key, value) {
@@ -2516,6 +2544,7 @@ SOFTWARE.
 
   async function handleFiles(files) {
     let combinedHtml = '';
+    let pendingTextSource = null;
     const failedKinds = new Set();
     const failedFiles = [];
     for (const file of files) {
@@ -2551,15 +2580,14 @@ SOFTWARE.
           } else {
             content = sanitizeHTML(plainTextToSafeHTML(text));
           }
-          const blob = file.slice(0, file.size, file.type || 'text/plain');
-          const extension = getFileExtension(file.name);
-          await storeImportedText(blob, extension);
-          importedTextFileBlob = blob;
-          importedTextFileExtension = extension;
-          activeViewerSettings.fileStem = getFileStem(file.name);
-          activeViewerSettings.documentTitle = title;
           combinedHtml += (combinedHtml ? '<hr>' : '') + content;
-          refreshExportButtons();
+          pendingTextSource = {
+            blob: file.slice(0, file.size, file.type || 'text/plain'),
+            extension: getFileExtension(file.name),
+            fileStem: getFileStem(file.name),
+            documentTitle: title,
+            filename: file.name
+          };
         } catch (err) {
           console.error('テキストファイルの読み込みに失敗しました:', err);
           failedKinds.add('text');
@@ -2571,19 +2599,50 @@ SOFTWARE.
       }
     }
 
-    if (combinedHtml.trim()) {
-      novelContentElement.innerHTML = combinedHtml;
+    let textCommitted = false;
+    if (pendingTextSource && combinedHtml.trim()) {
+      const keys = [STORAGE_KEYS.CONTENT, STORAGE_KEYS.SETTINGS, getPositionStorageKey()];
+      const previousValues = new Map();
       try {
+        for (const key of keys) previousValues.set(key, localStorage.getItem(key));
+        const nextSettings = {
+          ...activeViewerSettings,
+          fileStem: pendingTextSource.fileStem,
+          documentTitle: pendingTextSource.documentTitle
+        };
         localStorage.setItem(STORAGE_KEYS.CONTENT, combinedHtml);
         localStorage.removeItem(getPositionStorageKey());
-      } catch (_) {}
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(nextSettings));
+        await storeImportedText(pendingTextSource.blob, pendingTextSource.extension);
+        Object.assign(activeViewerSettings, nextSettings);
+        importedTextFileBlob = pendingTextSource.blob;
+        importedTextFileExtension = pendingTextSource.extension;
+        novelContentElement.innerHTML = combinedHtml;
+        textCommitted = true;
+        refreshExportButtons();
+      } catch (err) {
+        for (const [key, value] of [...previousValues].reverse()) {
+          try {
+            if (value === null) localStorage.removeItem(key);
+            else localStorage.setItem(key, value);
+          } catch (rollbackError) {
+            console.error(`取り込み保存の復元に失敗しました (${key}):`, rollbackError);
+          }
+        }
+        console.error('テキストファイルの保存に失敗しました:', err);
+        failedKinds.add('text');
+        failedFiles.push(`${pendingTextSource.filename}: ${getImportFailureReason(err, '本文を保存できません')}`);
+      }
+    }
+
+    if (textCommitted) {
       viewerContainer.scrollTop = 0;
       viewerContainer.scrollLeft = 0;
       collectTableOfContentsEntries();
       updateReadingState();
     }
     applySettings(activeViewerSettings);
-    saveSettings();
+    if (!textCommitted) saveSettings();
     closeAllDrawers();
     if (failedKinds.size) {
       const reasons = [];
@@ -2647,11 +2706,7 @@ SOFTWARE.
     }
   });
 
-  btnExportHtml.addEventListener('click', async () => {
-    closeAllDrawers();
-    let downloadUrl = null;
-    try {
-
+  async function createExportHtmlBlob() {
       let exportMediaDataUrl = null;
       let exportMediaType = document.body.classList.contains('video-bg') ? 'video' : backgroundMediaType;
       if (isMediaType(backgroundMediaType)) {
@@ -2680,6 +2735,7 @@ SOFTWARE.
 
       const clonedDoc = document.documentElement.cloneNode(true);
       clonedDoc.querySelectorAll('.drawer-panel').forEach(el => el.classList.remove('is-open'));
+      clonedDoc.querySelectorAll('.file-action-size').forEach(el => { el.textContent = ''; });
 
       const configScript = clonedDoc.querySelector('#viewer-initial-config');
       if (configScript) configScript.textContent = '\n' + JSON.stringify(activeViewerSettings, null, 2) + '\n';
@@ -2737,8 +2793,43 @@ SOFTWARE.
       }
 
       const htmlString = '<!DOCTYPE html>\n' + clonedDoc.outerHTML;
+      return new Blob([htmlString], { type: 'text/html;charset=utf-8' });
+  }
+
+  let htmlExportSizeUpdateToken = 0;
+  let htmlExportSizeTimer = null;
+  function scheduleHtmlExportSizeUpdate() {
+    const sizeElement = document.getElementById('html-export-size');
+    if (sizeElement) sizeElement.textContent = '計算中';
+    if (htmlExportSizeTimer) clearTimeout(htmlExportSizeTimer);
+    htmlExportSizeTimer = setTimeout(() => {
+      htmlExportSizeTimer = null;
+      updateHtmlExportSize();
+    }, 160);
+  }
+
+  async function updateHtmlExportSize() {
+    const token = ++htmlExportSizeUpdateToken;
+    const sizeElement = document.getElementById('html-export-size');
+    if (sizeElement) sizeElement.textContent = '計算中';
+    try {
+      const blob = await createExportHtmlBlob();
+      if (token !== htmlExportSizeUpdateToken) return;
+      updateExportFileSize(sizeElement, blob.size);
+    } catch (err) {
+      if (token !== htmlExportSizeUpdateToken) return;
+      if (sizeElement) sizeElement.textContent = '計測不可';
+      console.warn('HTMLエクスポートサイズを計算できませんでした:', err);
+    }
+  }
+
+  async function exportHtml() {
+    closeAllDrawers();
+    let downloadUrl = null;
+    try {
+      const blob = await createExportHtmlBlob();
+      const fileStem = resolveDocumentTitle('', activeViewerSettings.fileStem, 'Hitohira');
       const exportFileName = `${fileStem}.html`;
-      const blob = new Blob([htmlString], { type: 'text/html;charset=utf-8' });
       downloadUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = downloadUrl;
@@ -2751,7 +2842,9 @@ SOFTWARE.
     } finally {
       if (downloadUrl) setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
     }
-  });
+  }
+
+  btnExportHtml.addEventListener('click', () => exportHtml());
 
   function readEmbeddedResetDefaults(element, fallbackSettings, fallbackContent) {
     if (!element) return { settings: fallbackSettings, content: fallbackContent };
@@ -2958,6 +3051,22 @@ SOFTWARE.
     if (isExportedDocument) activeViewerSettings.wakeLock = false;
     themeDerivedColors = { ...THEME_PALETTES[activeViewerSettings.theme] || THEME_PALETTES.light };
 
+    const savedContent = isExportedDocument ? null : localStorage.getItem(STORAGE_KEYS.CONTENT);
+    const initialContent = resolveInitialContent(savedContent);
+    if (initialContent) novelContentElement.innerHTML = sanitizeHTML(initialContent);
+
+    applySettings(activeViewerSettings);
+    collectTableOfContentsEntries();
+    updateReadingState();
+    updateResetButtonState();
+    scheduleHtmlExportSizeUpdate();
+
+    requestAnimationFrame(() => {
+      setTimeout(() => restoreDeferredData(isExportedDocument), 0);
+    });
+  }
+
+  async function restoreDeferredData(isExportedDocument) {
     if (isExportedDocument) {
       const downloadDataEl = document.getElementById('viewer-download-data');
       try {
@@ -3004,17 +3113,11 @@ SOFTWARE.
       } catch (_) {}
     }
     refreshExportButtons();
-
     applySettings(activeViewerSettings);
-
-    const savedContent = isExportedDocument ? null : localStorage.getItem(STORAGE_KEYS.CONTENT);
-    const initialContent = resolveInitialContent(savedContent);
-    if (initialContent) novelContentElement.innerHTML = sanitizeHTML(initialContent);
-
-    collectTableOfContentsEntries();
     await restoreReadingPositionAfterLayout();
     updateReadingState();
     updateResetButtonState();
+    scheduleHtmlExportSizeUpdate();
   }
 
   init();

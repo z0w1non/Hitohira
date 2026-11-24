@@ -28,17 +28,36 @@ let childError = '';
 let childExit = null;
 let activeCleanup = null;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function removeTemporaryProfile(profile) {
+  let lastError;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!['EBUSY', 'EPERM', 'ENOTEMPTY'].includes(error.code)) throw error;
+      await sleep(500);
+    }
+  }
+  throw lastError;
+}
 async function waitForDevToolsPort(profile, child, timeoutMs = 10000) {
   const portFile = path.join(profile, 'DevToolsActivePort');
   return new Promise((resolve, reject) => {
     let settled = false;
     let watcher;
     let timeout;
+    const onStderr = chunk => {
+      const match = String(chunk).match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)\//);
+      if (match) finish(null, Number(match[1]));
+    };
     const finish = (error, portNumber) => {
       if (settled) return;
       settled = true;
       if (watcher) watcher.close();
       clearTimeout(timeout);
+      child.stderr?.off('data', onStderr);
       error ? reject(error) : resolve(portNumber);
     };
     const readPort = () => {
@@ -47,6 +66,7 @@ async function waitForDevToolsPort(profile, child, timeoutMs = 10000) {
         if (value > 0) finish(null, value);
       } catch (_) {}
     };
+    child.stderr?.on('data', onStderr);
     try { watcher = fs.watch(profile, readPort); } catch (_) {}
     readPort();
     timeout = setTimeout(() => finish(new Error(`ブラウザーがCDPポートを通知しませんでした (profile=${profile})`)), timeoutMs);
@@ -165,9 +185,9 @@ async function main() {
         child.stdio[3].destroy();
         child.stdio[4].destroy();
       }
-      await Promise.race([childClosed, sleep(1000)]);
+      await Promise.race([childClosed, sleep(3000)]);
     }
-    fs.rmSync(profile, { recursive: true, force: true, maxRetries: 4 });
+    await removeTemporaryProfile(profile);
   };
   try {
     // Given: 対象HTMLが読み込まれた読書画面。When: 利用者の操作を送る。Then: 可視状態を確認する。
@@ -210,8 +230,72 @@ async function main() {
       await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath });
       return send;
     };
+    const connectIsolated = async (startUrl, browserProfile, options = {}) => {
+        const initialUrl = options.offline ? 'about:blank' : startUrl;
+        const isolatedArgs = [...headlessArgs, '--disable-gpu', ...sandboxArgs, '--no-first-run',
+        '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0', `--user-data-dir=${browserProfile}`, initialUrl];
+      const isolatedChild = spawn(browser.path, isolatedArgs, { stdio: ['ignore', 'ignore', 'pipe'] });
+      const isolatedClosed = new Promise(resolve => isolatedChild.once('close', resolve));
+      isolatedChild.stderr.on('data', chunk => { childError += chunk.toString(); });
+      let isolatedSocket;
+      try {
+        const standaloneHtml = fs.readFileSync(new URL(startUrl), 'utf8');
+        assert.doesNotMatch(standaloneHtml, /<script\b[^>]*\bsrc\s*=/i, '単体HTMLが外部スクリプトを参照しています');
+        assert.doesNotMatch(standaloneHtml, /<link\b[^>]*\brel\s*=\s*["']?stylesheet[^>]*\bhref\s*=/i, '単体HTMLが外部スタイルシートを参照しています');
+        const port = Number(requestedPort) || await waitForDevToolsPort(browserProfile, isolatedChild);
+        const target = await waitForTarget(port, initialUrl);
+        isolatedSocket = new WebSocket(target.webSocketDebuggerUrl);
+        await new Promise((resolve, reject) => { isolatedSocket.addEventListener('open', resolve); isolatedSocket.addEventListener('error', reject); });
+        const isolatedSend = cdp(isolatedSocket);
+        await isolatedSend('Runtime.enable');
+        await isolatedSend('Page.enable');
+        const networkRequests = [];
+        isolatedSocket.addEventListener('message', event => {
+          const message = JSON.parse(event.data);
+          if (message.method === 'Network.requestWillBeSent') networkRequests.push(message.params.request.url);
+        });
+        if (options.offline) {
+          await isolatedSend('Network.enable');
+          await isolatedSend('Network.emulateNetworkConditions', {
+            offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0, connectionType: 'none'
+          });
+          const navigation = await isolatedSend('Page.navigate', { url: startUrl });
+          assert.equal(navigation.errorText, undefined, navigation.errorText);
+        }
+        await isolatedSend('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: options.downloadPath || downloadPath });
+        const evaluateIsolated = async expression => {
+          const result = await isolatedSend('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+          if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
+          return result.result.value;
+        };
+        if (options.exercise) await options.exercise({
+          send: isolatedSend, evaluate: evaluateIsolated, networkRequests, socket: isolatedSocket
+        });
+        const value = await isolatedSend('Runtime.evaluate', { expression: 'document.readyState', returnByValue: true });
+        assert.equal(value.result.value, 'complete');
+        const documentState = await isolatedSend('Runtime.evaluate', {
+          expression: `({ title: document.title, inlineApplicationScript: [...document.scripts].some(script => script.type !== 'application/json' && script.textContent.trim().length > 1000), text: document.getElementById('novel-content')?.textContent.trim() })`,
+          returnByValue: true
+        });
+        assert.equal(documentState.result.value.title.length > 0, true);
+        assert.ok(documentState.result.value.inlineApplicationScript);
+        if (!options.exercise) assert.ok(documentState.result.value.text.includes('Hitohira'));
+        await isolatedSend('Browser.close').catch(() => {});
+        isolatedSocket.close();
+        isolatedSocket = null;
+        terminateBrowserTree(isolatedChild);
+        await Promise.race([isolatedClosed, sleep(5000)]);
+      } finally {
+        isolatedSocket?.close();
+        terminateBrowserTree(isolatedChild);
+        await Promise.race([isolatedClosed, sleep(5000)]);
+        await removeTemporaryProfile(browserProfile);
+      }
+    };
     const closeBrowser = async command => {
-      command('Browser.close').catch(() => {});
+      const closingChild = child;
+      await command('Browser.close').catch(() => {});
+      terminateBrowserTree(closingChild);
       const exited = await Promise.race([childClosed.then(() => true), sleep(5000).then(() => false)]);
       assert.ok(exited, 'テスト用ブラウザーを終了できません');
       child = undefined;
@@ -227,9 +311,18 @@ async function main() {
       }
       return result.result.value;
     };
+    const formatFileSize = bytes => {
+      if (bytes < 1000) return `${bytes} B`;
+      const units = ['KB', 'MB', 'GB', 'TB'];
+      let size = bytes;
+      let unit = -1;
+      do { size /= 1000; unit++; } while (size >= 1000 && unit < units.length - 1);
+      const digits = size >= 100 ? 0 : size >= 10 ? 1 : 2;
+      return `${Number(size.toFixed(digits))} ${units[unit]}`;
+    };
     const exportRows = () => evaluate(`[...document.querySelectorAll('#loaded-file-downloads .file-action-group')]
       .filter(row => !row.querySelector('#btn-export-html'))
-      .map(row => [...row.children].map(element => element.id || element.textContent))`);
+      .map(row => [...row.children].filter(element => !element.classList.contains('file-action-size')).map(element => element.id || element.textContent))`);
     const textRow = ['テキスト', 'btn-download-text-delete', 'btn-download-text'];
     const imageRow = ['画像', 'btn-download-image-delete', 'btn-download-image'];
     const videoRow = ['動画', 'btn-download-video-delete', 'btn-download-video'];
@@ -238,6 +331,13 @@ async function main() {
       await sleep(100);
     }
     assert.equal(await evaluate('!!document.getElementById("shortcut-modal")'), true, '本文ビューアーの初期化が完了しません');
+    let initialExportSize = '';
+    for (let i = 0; i < 100; i++) {
+      initialExportSize = await evaluate('document.getElementById("html-export-size").textContent');
+      if (initialExportSize !== '計算中') break;
+      await sleep(50);
+    }
+    assert.match(initialExportSize, /^\d+(?:\.\d+)? (?:B|KB|MB|GB|TB)$/);
     record('起動・初期化', '対象HTMLの読み込みとDOM初期化');
     const defaultArticle = await evaluate('document.getElementById("novel-content").textContent.trim()');
     const defaultRanges = {
@@ -278,6 +378,68 @@ async function main() {
     };
     assert.deepEqual(await typography(), defaultTypography);
     record('設定', '新規プロファイルの初期設定を設定欄と計算済みスタイルで確認');
+    const settingRanges = [
+      ['font-size', 'fontSize', value => `${value}px`],
+      ['line-height', 'lineHeight', value => Number(value).toFixed(1)],
+      ['letter-spacing', 'letterSpacing', value => `${Number(value).toFixed(2)}em`],
+      ['content-width', 'contentWidth', value => `${value}px`],
+      ['content-padding', 'contentPadding', value => `${value}px`],
+      ['background-blur', 'backgroundBlur', value => `${value}px`],
+      ['ruby-scale', 'rubyScale', value => `${Math.round(value * 100)}%`],
+      ['panel-bg-alpha', 'panelBgAlpha', value => `${Math.round(value * 100)}%`]
+    ];
+    const setAndReadRangeBoundary = async boundary => evaluate(`(() => {
+      const ranges = ${JSON.stringify(settingRanges.map(([id, key]) => [id, key]))};
+      for (const [id] of ranges) {
+        const input = document.getElementById('ctrl-' + id);
+        input.value = input[${JSON.stringify(boundary)}];
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      const articleStyle = getComputedStyle(document.getElementById('novel-content'));
+      const rootStyle = getComputedStyle(document.documentElement);
+      const saved = JSON.parse(localStorage.getItem('hitohira_settings'));
+      return {
+        values: ranges.map(([id]) => document.getElementById('ctrl-' + id).valueAsNumber),
+        labels: ranges.map(([id]) => document.getElementById('val-' + id).textContent),
+        stored: ranges.map(([, key]) => saved[key]),
+        css: ['font-size', 'line-height', 'letter-spacing', 'content-width', 'content-padding', 'background-blur', 'ruby-scale', 'panel-bg-alpha']
+          .map(key => rootStyle.getPropertyValue('--' + key).trim())
+      };
+    })()`);
+    const rangeMinimums = [10, 1, 0, 480, 16, 0, 0.3, 0];
+    const rangeMaximums = [22, 3, 0.08, 960, 80, 24, 0.7, 1];
+    for (const [edge, expected] of [['min', rangeMinimums], ['max', rangeMaximums]]) {
+      const actual = await setAndReadRangeBoundary(edge);
+      assert.deepEqual(actual.values, expected, `${edge}imum設定値を選択できません`);
+      assert.deepEqual(actual.stored, expected, `${edge}imum設定値が保存されません`);
+      assert.deepEqual(actual.labels, expected.map((value, index) => settingRanges[index][2](value)),
+        `${edge}imum設定値と表示ラベルが一致しません`);
+      assert.deepEqual(actual.css, [
+        `${expected[0]}px`, String(expected[1]), `${expected[2]}em`, `${expected[3]}px`,
+        `${expected[4]}px`, `${expected[5]}px`, String(expected[6]), String(expected[7])
+      ]);
+    }
+    await evaluate('document.getElementById("btn-reset-all").click()');
+    for (let i = 0; i < 40; i++) {
+      if (await evaluate('document.getElementById("btn-reset-all").disabled')) break;
+      await sleep(50);
+    }
+    const resetRanges = await evaluate(`(() => {
+      const ranges = ${JSON.stringify(settingRanges.map(([id]) => id))};
+      const style = getComputedStyle(document.documentElement);
+      return {
+        values: ranges.map(id => document.getElementById('ctrl-' + id).valueAsNumber),
+        css: ['font-size', 'line-height', 'letter-spacing', 'content-width', 'content-padding', 'background-blur', 'ruby-scale', 'panel-bg-alpha']
+          .map(key => style.getPropertyValue('--' + key).trim()),
+        resetDisabled: document.getElementById('btn-reset-all').disabled
+      };
+    })()`);
+    assert.deepEqual(resetRanges, {
+      values: [16, 2, 0.04, 720, 48, 12, 0.5, 0.75],
+      css: ['16px', '2', '0.04em', '720px', '48px', '12px', '0.5', '0.75'],
+      resetDisabled: true
+    }, '境界値テスト後に設定・CSSを既定状態へ戻せません');
+    record('設定', '文字組み8項目の最小・最大値をUI・保存値と照合');
     const wakeStatus = await evaluate('document.getElementById("wake-lock-status").textContent');
     assert.match(wakeStatus, /^(（有効）|（待機中）|（取得失敗）|（利用不可）|)$/);
     record('起動・初期化', 'Wake Lockステータス表示');
@@ -321,6 +483,13 @@ async function main() {
     await sleep(800);
     const downloadedFiles = fs.readdirSync(downloadPath).filter(name => name.endsWith('.html'));
     assert.ok(downloadedFiles.length > 0, 'HTMLエクスポートファイルが生成されません');
+    const downloadedHtmlBytes = fs.statSync(path.join(downloadPath, downloadedFiles[0])).size;
+    for (let i = 0; i < 100; i++) {
+      if (await evaluate('document.getElementById("html-export-size").textContent !== "計算中"')) break;
+      await sleep(50);
+    }
+    assert.equal(await evaluate('document.getElementById("html-export-size").textContent'), formatFileSize(downloadedHtmlBytes),
+      'HTMLエクスポート欄のサイズが実際のダウンロードと一致しません');
     record('エクスポート', 'HTMLエクスポート操作を実行');
     fs.writeFileSync(textFixture, 'ブラウザー操作テスト本文\n', 'utf8');
     const textDocument = await send('DOM.getDocument', { depth: -1 });
@@ -348,6 +517,34 @@ async function main() {
       '非対応要素内の文字</div>'
     ].join(''), 'HTML取り込み後の本文DOMがサニタイズ結果と一致しません');
     record('インポート', 'HTML取り込み後の本文DOMをサニタイズ');
+    const bodyFixture = path.join(profile, 'different-stem.html');
+    fs.writeFileSync(bodyFixture, [
+      '<title>表示題名</title>',
+      '<!-- コメント --><h2 id="untrusted">章内リンク</h2>',
+      '<a href="#chapter" target="_blank" rel="opener">章内</a>',
+      '<a href="javascript:alert(1)">危険</a>',
+      '<img src="data:image/png;base64,AA==" alt="表紙" onerror="">'
+    ].join(''), 'utf8');
+    await send('DOM.setFileInputFiles', { nodeId: textInput.nodeId, files: [bodyFixture] });
+    for (let i = 0; i < 30; i++) {
+      if (await evaluate('document.title === "表示題名"')) break;
+      await sleep(100);
+    }
+    assert.equal(await evaluate('document.querySelector("#novel-content").innerHTML.replace(/ id="heading-\\d+"/g, "")'),
+      '<h2>章内リンク</h2><a href="#chapter">章内</a><a>危険</a><img src="data:image/png;base64,AA==" alt="表紙">',
+      'bodyフォールバック、コメント、属性、URLの処理が不正です');
+    record('インポート', 'bodyフォールバックとページ内・不正URLをDOMでサニタイズ');
+    const stemExport = path.join(downloadPath, 'different-stem.html');
+    await evaluate('document.getElementById("btn-export-html").click()');
+    for (let i = 0; i < 50 && !fs.existsSync(stemExport); i++) await sleep(100);
+    assert.ok(fs.existsSync(stemExport), 'エクスポートファイル名が読み込み元stemと一致しません');
+    const stemExportHtml = fs.readFileSync(stemExport, 'utf8');
+    assert.match(stemExportHtml, /<title>表示題名<\/title>/, 'HTML題名が読み込んだtitleと一致しません');
+    assert.match(stemExportHtml, /<h2 id="heading-0">章内リンク<\/h2>/, 'サニタイズ済み本文がHTMLへ埋め込まれていません');
+    assert.equal((stemExportHtml.match(/id="viewer-download-data"/g) || []).length, 1, 'エクスポート用データが重複しています');
+    assert.equal((stemExportHtml.match(/id="viewer-reset-defaults"/g) || []).length, 1, '初期化データが重複しています');
+    assert.doesNotMatch(stemExportHtml, /<(?:html|body|video)\b[^>]*\bblob:/i, 'エクスポートHTMLに実行元Blob URLが残っています');
+    record('エクスポート', 'HTML題名・ファイルstem・本文・埋め込み一意性を照合');
     const dropFile = async file => {
       const drop = { x: 20, y: 20, data: { items: [], files: [file], dragOperationsMask: 1 } };
       for (const type of ['dragEnter', 'dragOver', 'drop']) await send('Input.dispatchDragEvent', { ...drop, type });
@@ -356,6 +553,8 @@ async function main() {
     await sleep(500);
     assert.equal(await evaluate('document.title'), '.tmp-browser-text', 'テキストファイルstemがタイトルへ反映されません');
     assert.equal(await evaluate('document.getElementById("novel-content").textContent.trim()'), 'ブラウザー操作テスト本文');
+    assert.equal(await evaluate('document.querySelector("#btn-download-text").closest(".file-action-group").querySelector(".file-action-size").textContent'),
+      formatFileSize(fs.statSync(textFixture).size), '個別元ファイルのサイズ表示が元データと一致しません');
     assert.equal(await evaluate('document.body.classList.contains("drag-over")'), false);
     record('インポート', '実ファイルをドロップして本文を取り込む');
     assert.equal(await evaluate('(async () => new Promise((resolve, reject) => { const request = indexedDB.open("hitohira_media_db"); request.onerror = () => reject(request.error); request.onsuccess = () => { const db = request.result; const tx = db.transaction("background_media", "readonly"); const get = tx.objectStore("background_media").get("current_text"); get.onsuccess = () => resolve(!!get.result && get.result.blob instanceof Blob); get.onerror = () => reject(get.error); }; }))()'), true, '本文元ファイルがIndexedDBへ保存されません');
@@ -522,11 +721,11 @@ async function main() {
       assert.match(exportedHtml, /data:image\//, 'エクスポートHTMLに画像Data URLが埋め込まれていません');
       record('メディア・エクスポート', '画像Data URLをHTMLへ埋め込む');
       assert.deepEqual(await exportRows(), [textRow, imageRow]);
-      await evaluate('document.getElementById("btn-download-image-delete").click()');
+      await evaluate('document.querySelector("#btn-download-image-delete svg path").dispatchEvent(new MouseEvent("click", { bubbles: true }))');
       await sleep(300);
       assert.equal(await evaluate('document.body.classList.contains("has-bg")'), false, '画像削除が画面へ反映されません');
       assert.deepEqual(await exportRows(), [textRow]);
-      record('メディア・エクスポート', '画像の個別削除を画面へ反映');
+      record('メディア・エクスポート', 'SVG子要素からの委譲クリックで画像を削除し、行を同期');
 
       const resetDocument = await send('DOM.getDocument');
       const resetInput = await send('DOM.querySelector', { nodeId: resetDocument.root.nodeId, selector: '#file-input' });
@@ -677,6 +876,45 @@ async function main() {
       assert.equal(videoAfterDrag.paused, false);
       assert.notDeepEqual([videoAfterDrag.left, videoAfterDrag.top], [videoBeforeDrag.left, videoBeforeDrag.top]);
       record('背景操作', '動画をドラッグして移動しても再生を継続');
+      const videoBeforeResize = await evaluate(`(() => {
+        const video = document.getElementById('background-video');
+        return { src: video.src, paused: video.paused, currentTime: video.currentTime, readyState: video.readyState };
+      })()`);
+      await send('Emulation.setDeviceMetricsOverride', { width: 540, height: 960, deviceScaleFactor: 1, mobile: false });
+      await sleep(150);
+      const videoAfterResize = await evaluate(`(() => {
+        const video = document.getElementById('background-video');
+        const vw = innerWidth, vh = innerHeight;
+        const scale = Math.max(vw / video.videoWidth, vh / video.videoHeight);
+        const maxX = Math.max(0, (video.videoWidth * scale - vw) / 2);
+        const maxY = Math.max(0, (video.videoHeight * scale - vh) / 2);
+        const offset = name => Number((document.documentElement.style.getPropertyValue(name).match(/[+-]\\s*([\\d.]+)px/) || [0, 0])[1]) *
+          (document.documentElement.style.getPropertyValue(name).includes('-') ? -1 : 1);
+        return {
+          src: video.src, paused: video.paused, currentTime: video.currentTime, readyState: video.readyState,
+          offsetX: offset('--bg-pos-x'), offsetY: offset('--bg-pos-y'), maxX, maxY,
+          left: video.style.left, top: video.style.top
+        };
+      })()`);
+      assert.equal(videoAfterResize.src, videoBeforeResize.src);
+      assert.equal(videoAfterResize.paused, videoBeforeResize.paused);
+      assert.equal(videoAfterResize.readyState, videoBeforeResize.readyState);
+      assert.ok(videoAfterResize.currentTime >= videoBeforeResize.currentTime);
+      assert.ok(Math.abs(videoAfterResize.offsetX) <= videoAfterResize.maxX + 1);
+      assert.ok(Math.abs(videoAfterResize.offsetY) <= videoAfterResize.maxY + 1);
+      await evaluate('document.body.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }))');
+      const videoAfterReset = await evaluate(`(() => {
+        const video = document.getElementById('background-video');
+        return { src: video.src, paused: video.paused, currentTime: video.currentTime, readyState: video.readyState,
+          position: ['--bg-pos-x', '--bg-pos-y'].map(name => document.documentElement.style.getPropertyValue(name)) };
+      })()`);
+      assert.deepEqual(videoAfterReset.position, ['calc(50% + 0px)', 'calc(50% + 0px)']);
+      assert.equal(videoAfterReset.src, videoBeforeResize.src);
+      assert.equal(videoAfterReset.paused, videoBeforeResize.paused);
+      assert.equal(videoAfterReset.readyState, videoBeforeResize.readyState);
+      assert.ok(videoAfterReset.currentTime >= videoBeforeResize.currentTime);
+      await send('Emulation.clearDeviceMetricsOverride');
+      record('背景操作', '動画の画面サイズ変更と位置リセット後も再生状態を維持');
       let storedVideo = false;
       for (let i = 0; i < 40; i++) {
         storedVideo = await evaluate('(async () => new Promise(resolve => { const request = indexedDB.open("hitohira_media_db"); request.onerror = () => resolve(false); request.onsuccess = () => { const tx = request.result.transaction("background_media", "readonly"); const get = tx.objectStore("background_media").get("current"); get.onsuccess = () => resolve(get.result?.mediaType === "video"); get.onerror = () => resolve(false); }; }))()');
@@ -952,7 +1190,7 @@ async function main() {
     await waitForReading('!!document.getElementById("btn-download-text")', '書き出し失敗の検証用本文を取り込めません');
     const failureDownloads = path.join(profile, 'failed-export-downloads');
     fs.mkdirSync(failureDownloads);
-    await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: failureDownloads });
+    await send('Browser.setDownloadBehavior', { behavior: 'deny', downloadPath: failureDownloads });
     await evaluate(`(() => {
       const create = URL.createObjectURL;
       const log = console.error;
@@ -1100,6 +1338,15 @@ async function main() {
         const embedded = name.startsWith('measure-text-') ? textBase64 : mediaDataUrl.split(',')[1];
         assert.equal(Buffer.from(embedded, 'base64').length, size, `${name}の書き出しで元ファイルサイズが変わりました`);
         const outputBytes = Buffer.byteLength(outputHtml, 'utf8');
+        await waitFor('document.getElementById("html-export-size").textContent !== "計算中"', `${name}のHTMLエクスポートサイズを計算できません`);
+        const exportSizeLabel = await evaluate('document.getElementById("html-export-size").textContent');
+        const sizeUnits = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let displayedSize = outputBytes;
+        let displayedUnit = 0;
+        while (displayedSize >= 1000 && displayedUnit < sizeUnits.length - 1) { displayedSize /= 1000; displayedUnit++; }
+        const displayedPrecision = displayedSize >= 100 ? 0 : displayedSize >= 10 ? 1 : 2;
+        const expectedSizeLabel = `${Number(displayedSize.toFixed(displayedPrecision))} ${sizeUnits[displayedUnit]}`;
+        assert.equal(exportSizeLabel, expectedSizeLabel, `${name}のHTMLエクスポートサイズ表示が実ファイルと一致しません`);
         console.log(`  保存・書き出し計測 ${name}: input=${size} B, usageDelta=${after.usage - before.usage} B, import=${importMs} ms, export=${exportMs} ms, html=${outputBytes} B`);
       };
       const measurementQuota = 8 * 1024 * 1024;
@@ -1142,7 +1389,83 @@ async function main() {
       }
     }
 
-    assert.ok(exportedVideoHtml, '独立起動を検証するエクスポートHTMLがありません');
+    const minifierProfile = path.join(profile, 'minifier-profile');
+    await closeBrowser(send);
+    fs.rmSync(path.join(profile, 'DevToolsActivePort'), { force: true });
+    const minifierUrl = pathToFileURL(path.join(root, 'public', 'hitohira.html')).href;
+    const offlineDownloadPath = path.join(profile, 'offline-downloads');
+    fs.mkdirSync(offlineDownloadPath);
+    await connectIsolated(minifierUrl, minifierProfile, {
+      offline: true,
+      downloadPath: offlineDownloadPath,
+      exercise: async ({ send: offlineSend, evaluate: offlineEvaluate, networkRequests }) => {
+        const waitForOffline = async (expression, message) => {
+          for (let i = 0; i < 100; i++) {
+            if (await offlineEvaluate(expression)) return;
+            await sleep(50);
+          }
+          assert.fail(message);
+        };
+        await waitForOffline('document.readyState === "complete" && !!document.getElementById("novel-content")', 'オフラインで公開HTMLを起動できません');
+        assert.equal(await offlineEvaluate('navigator.onLine'), false, 'ブラウザーがオフライン状態になっていません');
+        assert.ok((await offlineEvaluate('document.getElementById("novel-content").textContent')).includes('Hitohira'));
+        const networkProbe = await offlineEvaluate(`(async () => {
+          try { await fetch('https://example.com/', { cache: 'no-store' }); return '接続'; }
+          catch (_) { return '遮断'; }
+        })()`);
+        assert.equal(networkProbe, '遮断', 'オフライン状態で外部接続を遮断できません');
+        const applicationRequestStart = networkRequests.length;
+
+        await offlineEvaluate('document.getElementById("btn-theme-toggle").click()');
+        assert.equal(await offlineEvaluate('document.documentElement.dataset.theme'), 'dark', 'オフラインでテーマを変更できません');
+        const documentTree = await offlineSend('DOM.getDocument', { depth: -1 });
+        const fileInput = await offlineSend('DOM.querySelector', { nodeId: documentTree.root.nodeId, selector: '#file-input' });
+        await offlineSend('DOM.setFileInputFiles', { nodeId: fileInput.nodeId, files: [textFixture] });
+        await waitForOffline('document.title === ".tmp-browser-text" && !!document.getElementById("btn-download-text")', 'オフラインでテキスト本文を読み込めません');
+        assert.equal(await offlineEvaluate('document.getElementById("novel-content").textContent.trim()'), 'ブラウザー操作テスト本文');
+        assert.equal(await offlineEvaluate('document.querySelector("#btn-download-text").closest(".file-action-group").querySelector(".file-action-size").textContent'),
+          formatFileSize(fs.statSync(textFixture).size), 'オフラインで読み込んだ元ファイルのサイズが一致しません');
+        assert.equal(await offlineEvaluate('(async () => new Promise(resolve => { const request = indexedDB.open("hitohira_media_db"); request.onerror = () => resolve(false); request.onsuccess = () => { const db = request.result; const tx = db.transaction("background_media", "readonly"); const get = tx.objectStore("background_media").get("current_text"); get.onsuccess = () => resolve(!!get.result && get.result.blob instanceof Blob); get.onerror = () => resolve(false); }; }))()'), true,
+          'オフラインで読み込んだ元ファイルを保存できません');
+        assert.equal(await offlineEvaluate('(async () => new Promise(resolve => { const request = indexedDB.open("hitohira_media_db"); request.onerror = () => resolve(-1); request.onsuccess = () => { const db = request.result; const get = db.transaction("background_media", "readonly").objectStore("background_media").get("current_text"); get.onsuccess = () => resolve(get.result.blob.size); get.onerror = () => resolve(-1); }; }))()'),
+          fs.statSync(textFixture).size, 'オフラインで保存した元ファイルのバイト数が一致しません');
+        assert.equal(await offlineEvaluate('localStorage.getItem("hitohira_content")?.includes("ブラウザー操作テスト本文")'), true,
+          'オフラインで読み込んだ本文を保存できません');
+        await offlineSend('Page.reload', { ignoreCache: true });
+        await waitForOffline('document.readyState === "complete" && document.documentElement.dataset.theme === "dark" && !!document.getElementById("btn-download-text")',
+          'オフライン再読み込み後に設定と元ファイルを復元できません');
+        assert.equal(await offlineEvaluate('document.getElementById("novel-content").textContent.trim()'), 'ブラウザー操作テスト本文');
+        assert.equal(await offlineEvaluate('(async () => new Promise(resolve => { const request = indexedDB.open("hitohira_media_db"); request.onerror = () => resolve(-1); request.onsuccess = () => { const db = request.result; const get = db.transaction("background_media", "readonly").objectStore("background_media").get("current_text"); get.onsuccess = () => resolve(get.result.blob.size); get.onerror = () => resolve(-1); }; }))()'),
+          fs.statSync(textFixture).size, 'オフラインで復元した元ファイルのバイト数が一致しません');
+
+        await offlineEvaluate('document.getElementById("btn-export-html").click()');
+        let exportedFile = null;
+        for (let i = 0; i < 200; i++) {
+          exportedFile = fs.readdirSync(offlineDownloadPath).find(name => name.endsWith('.html'));
+          if (exportedFile) break;
+          await sleep(50);
+        }
+        assert.ok(exportedFile, 'オフラインでHTMLを書き出せません');
+        const exportedHtmlPath = path.join(offlineDownloadPath, exportedFile);
+        const exportedHtml = fs.readFileSync(exportedHtmlPath, 'utf8');
+        assert.doesNotMatch(exportedHtml, /<script\b[^>]*\bsrc\s*=/i, 'オフラインHTMLに外部スクリプト参照が含まれます');
+        assert.doesNotMatch(exportedHtml, /<link\b[^>]*\brel\s*=\s*["']?stylesheet[^>]*\bhref\s*=/i, 'オフラインHTMLに外部スタイル参照が含まれます');
+        assert.doesNotMatch(exportedHtml, /<(?:html|body|video)\b[^>]*\bblob:/i, 'オフラインHTMLに実行元Blob URLが残っています');
+        const downloadData = JSON.parse(exportedHtml.match(/<script[^>]+id="viewer-download-data"[^>]*>([\s\S]*?)<\/script>/)[1]);
+        assert.deepEqual(Buffer.from(downloadData.textBase64, 'base64'), fs.readFileSync(textFixture), 'オフラインHTMLの埋め込み元ファイルが元バイト列と一致しません');
+        await waitForOffline('document.getElementById("html-export-size").textContent !== "計算中"', 'オフラインHTMLのサイズ表示を計算できません');
+        assert.equal(await offlineEvaluate('document.getElementById("html-export-size").textContent'),
+          formatFileSize(fs.statSync(exportedHtmlPath).size), 'オフラインHTMLの表示サイズが出力ファイルと一致しません');
+        assert.deepEqual(networkRequests.slice(applicationRequestStart).filter(url => /^https?:/i.test(url)), [],
+          '本文・保存・再読み込み・エクスポート中にアプリがHTTP(S)通信を要求しました');
+        record('オフライン配布', 'ネットワーク遮断下で公開HTMLの起動、テーマ設定、本文取込、保存復元、HTML出力を確認');
+        record('オフライン配布', 'HTTP(S)接続遮断とアプリ操作中の外部通信なしを確認');
+      }
+    });
+    record('公開用ビルド', '公開用圧縮版をオフラインで起動');
+    if (!exportedVideoHtml) {
+      console.log('[  SKIPPED ] 動画を含むHTMLの独立起動（NOVEL_VIEWER_POLICY_TESTS=1で実行）');
+    } else {
     const standaloneProfile = path.join(profile, 'standalone-profile');
     const standalonePath = path.join(profile, 'standalone-viewer.html');
     const standaloneUrl = pathToFileURL(standalonePath).href;
@@ -1174,6 +1497,7 @@ async function main() {
     assert.deepEqual(await exportRows(), []);
     assert.equal(await evaluate('document.getElementById("btn-export-html").disabled'), false);
     record('エクスポート', '元ブラウザーを終了し、新規プロファイルでHTML単体の起動と元ファイルの一致を確認');
+    }
 
     let total = 0;
     for (const [category, cases] of categories) {
