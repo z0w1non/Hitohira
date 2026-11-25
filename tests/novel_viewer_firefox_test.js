@@ -104,14 +104,57 @@ async function run() {
       await press('\uE00C');
       assert.equal(await evaluate('document.getElementById("settings-drawer").classList.contains("is-open")'), false);
     });
+    await test('横書き・縦書きを切り替えて表示状態を確認', async () => {
+      for (const mode of ['vertical', 'horizontal']) {
+        await evaluate(`document.querySelector('#ctrl-writing-mode button[data-value=${mode}]').click()`);
+        assert.equal(await evaluate('document.documentElement.dataset.writingMode'), mode);
+      }
+    });
+    await test('TXTを取り込み、本文と設定を保存後に復元', async () => {
+      await evaluate(`(() => {
+        const input = document.getElementById('file-input');
+        const file = new File(['Firefox integration novel'], 'firefox-test.txt', { type: 'text/plain' });
+        Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      for (let i = 0; i < 50 && !await evaluate('document.getElementById("novel-content").textContent.includes("Firefox integration novel")'); i++) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      assert.equal(await evaluate('document.getElementById("novel-content").textContent.includes("Firefox integration novel")'), true);
+      await evaluate('document.querySelector("#ctrl-writing-mode button[data-value=vertical]").click()');
+      await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      assert.equal(await evaluate('localStorage.getItem("hitohira_content").includes("Firefox integration novel")'), true);
+      await send('browsingContext.navigate', { context, url, wait: 'complete' });
+      assert.equal(await evaluate('document.getElementById("novel-content").textContent.includes("Firefox integration novel")'), true);
+      assert.equal(await evaluate('document.documentElement.dataset.writingMode'), 'vertical');
+      assert.equal(await evaluate('performance.getEntriesByType("resource").some(entry => /^https?:/i.test(entry.name))'), false,
+        '起動時に外部HTTP(S)リソースを要求しました');
+    });
+    await test('HTMLエクスポートを生成し、埋め込み本文を検査', async () => {
+      await evaluate(`(() => {
+        window.exportProbe = {};
+        URL.createObjectURL = blob => { window.exportProbe.blob = blob; return 'blob:firefox-test'; };
+        HTMLAnchorElement.prototype.click = function() {};
+        document.getElementById('btn-export-html').click();
+      })()`);
+      for (let i = 0; i < 100 && !await evaluate('window.exportProbe.blob instanceof Blob'); i++) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      const exported = await evaluate('window.exportProbe.blob ? window.exportProbe.blob.text() : ""');
+      assert.ok(exported.includes('Firefox integration novel'));
+      assert.ok(exported.includes('id="viewer-download-data"'));
+      assert.ok(!/<(?:script|link|img)[^>]+(?:src|href)=["']https?:\/\//i.test(exported),
+        'エクスポートHTMLの実行時リソースが外部URLを参照しています');
+      await evaluate('delete window.exportProbe');
+    });
     await send('session.end', {});
   } finally {
     await dispose();
     process.removeListener('SIGINT', interrupted);
     process.removeListener('SIGTERM', interrupted);
   }
-  console.log('[==========] 2 tests ran.');
-  console.log('[  PASSED  ] 2 tests.');
+  console.log('[==========] 5 tests ran.');
+  console.log('[  PASSED  ] 5 tests.');
 }
 
 run().catch(error => {

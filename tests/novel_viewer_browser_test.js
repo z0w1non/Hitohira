@@ -1105,6 +1105,70 @@ async function main() {
       '横書きに戻すと同じ本文ブロックへ移動できません');
     record('読書位置', '縦書きと横書きを切り替えても同じ本文ブロックを表示');
 
+    await evaluate(`(() => {
+      const nativeSet = Storage.prototype.setItem;
+      window.storageFailureProbe = { nativeSet, writes: 0 };
+      Storage.prototype.setItem = function(key, value) {
+        if (key.startsWith('hitohira_position:')) { window.storageFailureProbe.writes++; throw new DOMException('quota', 'QuotaExceededError'); }
+        return nativeSet.call(this, key, value);
+      };
+      document.querySelectorAll('#novel-content p')[20].scrollIntoView({ block: 'start' });
+    })()`);
+    await waitForReading('!document.getElementById("error-notice").hidden && window.storageFailureProbe.writes > 0', '読書位置保存失敗が通知されません');
+    await evaluate('document.querySelectorAll("#novel-content p")[21].scrollIntoView({ block: "start" })');
+    assert.equal(await evaluate('window.storageFailureProbe.writes > 1'), true, '連続した保存失敗が発生していません');
+    assert.equal(await evaluate('document.getElementById("error-notice-message").textContent.includes("保存できませんでした")'), true);
+    assert.ok(await evaluate('document.getElementById("viewer-container").scrollTop > 0'), '保存失敗で現在の読書位置が失われました');
+    await evaluate('Storage.prototype.setItem = window.storageFailureProbe.nativeSet');
+    await evaluate('document.querySelectorAll("#novel-content p")[22].scrollIntoView({ block: "start" })');
+    await waitForReading(`${savedReadingPosition}?.lineIndex === 25 || ${savedReadingPosition}?.scrollTop > 0`, '保存領域復旧後に読書位置が再保存されません');
+    await waitForReading('document.getElementById("error-notice").hidden', '再保存後も保存失敗通知が残ります');
+    await evaluate('delete window.storageFailureProbe');
+    record('読書位置', '保存失敗を通知・集約し、復旧後のスクロール操作で再保存');
+
+    await send('Emulation.setDeviceMetricsOverride', { width: 320, height: 640, deviceScaleFactor: 1, mobile: false });
+    await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+    const tapElement = async selector => {
+      const point = await evaluate(`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+      await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: point.x, y: point.y, id: 1 }] });
+      await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    };
+    const responsiveState = async drawer => evaluate(`(() => {
+      const panel = document.getElementById(${JSON.stringify(drawer)});
+      const r = panel.getBoundingClientRect();
+      return { viewport: [innerWidth, innerHeight], documentWidth: document.documentElement.scrollWidth,
+        panel: [r.left, r.top, r.right, r.bottom], visible: getComputedStyle(panel).visibility,
+        bodyWidth: document.body.scrollWidth, bodyHeight: document.body.scrollHeight };
+    })()`);
+    const narrowPage = await evaluate('({ width: document.documentElement.scrollWidth, viewport: innerWidth })');
+    assert.ok(narrowPage.width <= 320 && narrowPage.viewport === 320, '幅320pxでページが横にはみ出します');
+    await tapElement('#btn-open-settings');
+    await waitForReading('getComputedStyle(document.getElementById("settings-drawer")).visibility === "visible" && Math.abs(document.getElementById("settings-drawer").getBoundingClientRect().right - innerWidth) <= 2', '狭い画面でタッチして設定を開けません');
+    const settingsGeometry = await responsiveState('settings-drawer');
+    assert.deepEqual(settingsGeometry.viewport, [320, 640]);
+    assert.equal(settingsGeometry.documentWidth, 320);
+    assert.ok(settingsGeometry.panel[0] >= -1 && settingsGeometry.panel[2] <= 321 && settingsGeometry.panel[3] <= 640,
+      `設定ドロワーが狭い画面からはみ出します: ${JSON.stringify(settingsGeometry)}`);
+    assert.equal(settingsGeometry.visible, 'visible');
+    await tapElement('#btn-close-settings');
+    await waitForReading('getComputedStyle(document.getElementById("settings-drawer")).visibility === "hidden"', 'タッチで設定を閉じられません');
+    await tapElement('#btn-open-settings');
+    await waitForReading('getComputedStyle(document.getElementById("settings-drawer")).visibility === "visible" && Math.abs(document.getElementById("settings-drawer").getBoundingClientRect().right - innerWidth) <= 2', '設定ドロワーを再度開けません');
+    await tapElement('#btn-open-toc');
+    await waitForReading('getComputedStyle(document.getElementById("toc-drawer")).visibility === "visible" && Math.abs(document.getElementById("toc-drawer").getBoundingClientRect().right - innerWidth) <= 2', '狭い画面でタッチして目次を開けません');
+    const tocGeometry = await responsiveState('toc-drawer');
+    assert.ok(tocGeometry.panel[0] >= -1 && tocGeometry.panel[2] <= 321 && tocGeometry.panel[3] <= 640,
+      '目次ドロワーが狭い画面からはみ出します');
+    await tapElement('#btn-close-toc');
+    await waitForReading('getComputedStyle(document.getElementById("toc-drawer")).visibility === "hidden"', 'タッチで目次を閉じられません');
+    await evaluate('document.querySelector("#ctrl-writing-mode button[data-value=vertical]").click()');
+    assert.equal(await evaluate('document.documentElement.dataset.writingMode'), 'vertical');
+    await evaluate('document.querySelector("#ctrl-writing-mode button[data-value=horizontal]").click()');
+    assert.equal(await evaluate('document.documentElement.dataset.writingMode'), 'horizontal');
+    await send('Emulation.setTouchEmulationEnabled', { enabled: false });
+    await send('Emulation.clearDeviceMetricsOverride');
+    record('レスポンシブ表示', '幅320pxの縦長画面で本文・設定・目次を表示し、タッチ操作と書字方向切替を確認');
+
     const viewer = "document.getElementById('viewer-container')";
     const verifyHeldScroll = async (mode, key, keyCode, property, extent, direction) => {
       await evaluate(`(() => {
@@ -1261,7 +1325,7 @@ async function main() {
         assert.fail(message);
       };
       await send('Page.navigate', { url: origin + '/restricted' });
-      await waitFor('location.pathname === "/restricted" && !!document.getElementById("ctrl-wake-lock") && document.readyState === "complete"', '制約検証ページを読み込めません');
+      await waitForReading('location.pathname === "/restricted" && !!document.getElementById("ctrl-wake-lock") && document.readyState === "complete"', '制約検証ページを読み込めません');
       assert.equal(await evaluate('document.featurePolicy.allowsFeature("screen-wake-lock")'), false);
       assert.equal(await evaluate('document.featurePolicy.allowsFeature("autoplay")'), false);
       const audioOutcome = await evaluate(`(async () => {
@@ -1273,11 +1337,11 @@ async function main() {
       assert.equal(audioOutcome, 'NotAllowedError', '利用者操作のない音声の自動再生が拒否されません');
       record('ブラウザーポリシー', 'ポリシー制約下で利用者操作のない音声の自動再生を拒否');
       await evaluate('document.getElementById("ctrl-wake-lock").click()');
-      await waitFor('document.getElementById("wake-lock-status").textContent === "（取得失敗）"', 'ポリシーによるWake Lock取得失敗が表示されません');
+      await waitForReading('document.getElementById("wake-lock-status").textContent === "（取得失敗）"', 'ポリシーによるWake Lock取得失敗が表示されません');
       record('ブラウザーポリシー', 'Permissions-PolicyでWake Lockを拒否');
 
       await send('Page.navigate', { url: origin + '/storage' });
-      await waitFor('location.pathname === "/storage" && !!document.getElementById("file-input") && document.readyState === "complete"', '容量検証ページを読み込めません');
+      await waitForReading('location.pathname === "/storage" && !!document.getElementById("file-input") && document.readyState === "complete"', '容量検証ページを読み込めません');
       const importText = (name, length) => evaluate(`(() => {
         const bytes = new Uint8Array(${length});
         bytes.fill(65);
@@ -1295,9 +1359,9 @@ async function main() {
         const { quota } = await send('Storage.getUsageAndQuota', { origin });
         assert.equal(quota, quotaSize, 'IndexedDBのオリジン容量を設定できません');
         await importText('既存本文.txt', 8);
-        await waitFor('document.title === "既存本文"', '容量上限内の本文を保存できません');
+        await waitForReading('document.title === "既存本文"', '容量上限内の本文を保存できません');
         await importText('容量超過.txt', 2 * quotaSize);
-        await waitFor('!document.getElementById("error-notice").hidden || document.title === "容量超過"', '容量超過の入力が完了しません');
+        await waitForReading('!document.getElementById("error-notice").hidden || document.title === "容量超過"', '容量超過の入力が完了しません');
         assert.equal(await evaluate('document.title'), '既存本文', '制限中に本文が置き換わりました');
         assert.match(await evaluate('document.getElementById("error-notice-message").textContent'), /容量超過\.txt.*保存領域が不足/);
         assert.equal(await evaluate('document.getElementById("novel-content").textContent.trim()'), 'AAAAAAAA');
@@ -1305,7 +1369,7 @@ async function main() {
         await send('Storage.overrideQuotaForOrigin', { origin });
       }
       await importText('容量解除後.txt', 12);
-      await waitFor('document.title === "容量解除後"', '容量上限の解除後に本文を保存できません');
+      await waitForReading('document.title === "容量解除後"', '容量上限の解除後に本文を保存できません');
       record('ブラウザーポリシー', 'IndexedDB容量超過時に既存本文を保持し、制限解除後に保存');
 
       const measurementPath = path.join(profile, 'export-measurements');
@@ -1317,7 +1381,7 @@ async function main() {
         const before = await send('Storage.getUsageAndQuota', { origin });
         const importStarted = performance.now();
         await importFile();
-        await waitFor(ready, `${name}を取り込めません`);
+        await waitForReading(ready, `${name}を取り込めません`);
         const importMs = Math.round(performance.now() - importStarted);
         const after = await send('Storage.getUsageAndQuota', { origin });
         const exportStarted = performance.now();
@@ -1338,7 +1402,7 @@ async function main() {
         const embedded = name.startsWith('measure-text-') ? textBase64 : mediaDataUrl.split(',')[1];
         assert.equal(Buffer.from(embedded, 'base64').length, size, `${name}の書き出しで元ファイルサイズが変わりました`);
         const outputBytes = Buffer.byteLength(outputHtml, 'utf8');
-        await waitFor('document.getElementById("html-export-size").textContent !== "計算中"', `${name}のHTMLエクスポートサイズを計算できません`);
+        await waitForReading('document.getElementById("html-export-size").textContent !== "計算中"', `${name}のHTMLエクスポートサイズを計算できません`);
         const exportSizeLabel = await evaluate('document.getElementById("html-export-size").textContent');
         const sizeUnits = ['B', 'KB', 'MB', 'GB', 'TB'];
         let displayedSize = outputBytes;
@@ -1377,12 +1441,12 @@ async function main() {
 
       if (exportedVideoHtml) {
         await send('Page.navigate', { url: origin + '/restricted-video' });
-        await waitFor('location.pathname === "/restricted-video" && document.body?.classList.contains("video-bg")', '自動再生制約下で背景動画を復元できません');
+        await waitForReading('location.pathname === "/restricted-video" && document.body?.classList.contains("video-bg")', '自動再生制約下で背景動画を復元できません');
         assert.equal(await evaluate('document.featurePolicy.allowsFeature("autoplay")'), false);
-        await waitFor('document.getElementById("background-video").readyState >= 3', '自動再生制約下で動画をデコードできません');
+        await waitForReading('document.getElementById("background-video").readyState >= 3', '自動再生制約下で動画をデコードできません');
         const playing = '!document.getElementById("background-video").paused';
         const rejected = '!document.getElementById("error-notice").hidden && document.getElementById("error-notice-message").textContent.includes("自動再生を拒否")';
-        await waitFor(`${playing} || (${rejected})`, 'ミュート動画の再生結果を確認できません');
+        await waitForReading(`${playing} || (${rejected})`, 'ミュート動画の再生結果を確認できません');
         const outcome = await evaluate(playing) ? '再生' : 'NotAllowedError';
         console.log(`  自動再生ポリシー適用時のミュート動画: ${outcome}`);
         record('ブラウザーポリシー', 'Permissions-Policy適用時のミュート動画の再生可否を観測');

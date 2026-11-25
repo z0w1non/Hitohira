@@ -620,7 +620,17 @@ function readingFixture() {
     localStorage: { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) },
     findCurrentReadingContext: () => ({ currentHeading: 'chapter', lineIndex: 0 }),
     novelContentElement: { querySelectorAll: () => [{ scrollIntoView: options => visits.push(options) }] },
-    console: { warn: error => messages.push(error), error: error => messages.push(error) },
+    console: { warn: error => messages.push(error), error: (...args) => messages.push(args) },
+    failedLocalStorageWrites: new Set(),
+    reportLocalStorageWrite(key, error) {
+      if (!context.failedLocalStorageWrites.has(key)) {
+        context.failedLocalStorageWrites.add(key);
+        messages.push(`notice:${key}:${error.message}`);
+      }
+    },
+    confirmLocalStorageWrite(key) {
+      context.failedLocalStorageWrites.delete(key);
+    },
     backgroundMediaOffsetX: 15, backgroundMediaOffsetY: -5, isRestoringReadingPosition: false, changingSavedData: false
   };
   const { computeProgressRatio } = load('function computeProgressRatio', 'function findCurrentReadingContext', ['computeProgressRatio'], context);
@@ -642,6 +652,53 @@ test('目次・読書進捗・読書位置', '書字方向に合った軸で進�
   assert.equal(fixture.computeProgressRatio(), 1);
   fixture.viewer.scrollWidth = fixture.viewer.clientWidth;
   assert.equal(fixture.computeProgressRatio(), 0);
+});
+
+test('保存データとストレージ', '設定保存の失敗を一度通知し、再保存後に失敗状態を解除する', () => {
+  const settings = { theme: 'light' };
+  const failed = new Set();
+  const notices = [];
+  let rejectWrite = true;
+  const { saveSettings } = load('function saveSettings()', 'function updateSetting', ['saveSettings'], {
+    activeViewerSettings: settings,
+    STORAGE_KEYS: { SETTINGS: 'settings' },
+    localStorage: { setItem(key, value) { if (rejectWrite) throw new Error('拒否'); this.value = [key, value]; } },
+    failedLocalStorageWrites: failed,
+    reportLocalStorageWrite(key, error) {
+      if (!failed.has(key)) { failed.add(key); notices.push(error.message); }
+    },
+    confirmLocalStorageWrite(key) { failed.delete(key); },
+    scheduleHtmlExportSizeUpdate() {}
+  });
+  saveSettings();
+  saveSettings();
+  assert.deepEqual(notices, ['拒否']);
+  assert.equal(failed.has('settings'), true);
+  rejectWrite = false;
+  saveSettings();
+  assert.equal(failed.has('settings'), false);
+});
+
+test('保存データとストレージ', '背景位置の保存失敗を通知し、保存領域復旧後に位置を保存する', () => {
+  const values = new Map();
+  const failures = [];
+  let rejectWrite = true;
+  const globals = {
+    getPositionStorageKey: () => 'position',
+    backgroundMediaOffsetX: 24, backgroundMediaOffsetY: -8,
+    localStorage: {
+      getItem: key => values.get(key) ?? null,
+      setItem(key, value) { if (rejectWrite) throw new Error('拒否'); values.set(key, value); }
+    },
+    reportLocalStorageWrite(key, error) { failures.push([key, error.message]); },
+    confirmLocalStorageWrite() {}
+  };
+  const { saveBackgroundPosition } = load('function saveBackgroundPosition()', 'function updateReadingState', ['saveBackgroundPosition'], globals);
+  saveBackgroundPosition();
+  assert.deepEqual(failures, [['position', '拒否']]);
+  rejectWrite = false;
+  saveBackgroundPosition();
+  assert.deepEqual(JSON.parse(values.get('position')), { bgOffsetX: 24, bgOffsetY: -8 });
 });
 
 test('目次・読書進捗・読書位置', '横書き・縦書きの見出し境界と現在ブロックを実DOM矩形から選ぶ', () => {
@@ -709,14 +766,19 @@ test('目次・読書進捗・読書位置', '書字方向が変わったとき�
   assert.equal(fixture.visits.length, 1);
 });
 
-test('保存データとストレージ', '読書位置の保存領域が拒否しても表示状態を維持する', () => {
+test('保存データとストレージ', '読書位置の保存失敗を通知し、復旧後の保存で未保存状態を解消する', () => {
   const fixture = readingFixture();
+  const originalTop = fixture.viewer.scrollTop;
   fixture.context.localStorage.setItem = () => { throw new Error('容量不足'); };
-  fixture.context.localStorage.getItem = () => { throw new Error('読込拒否'); };
   fixture.executeSavePosition();
-  fixture.restoreReadingPosition();
-  assert.equal(fixture.messages.length, 2);
-  assert.equal(fixture.viewer.scrollTop, 125);
+  fixture.executeSavePosition();
+  assert.equal(fixture.messages.filter(message => typeof message === 'string' && message.startsWith('notice:')).length, 1);
+  assert.equal(fixture.context.failedLocalStorageWrites.has('hitohira_position:first'), true);
+  assert.equal(fixture.viewer.scrollTop, originalTop);
+  fixture.context.localStorage.setItem = (key, value) => fixture.values.set(key, value);
+  fixture.executeSavePosition();
+  assert.equal(fixture.context.failedLocalStorageWrites.has('hitohira_position:first'), false);
+  assert.equal(JSON.parse(fixture.values.get('hitohira_position:first')).scrollTop, originalTop);
 });
 
 test('目次・読書進捗・読書位置', '遅延画像の描画後に位置を復元し、復元中の保存を抑止する', async () => {
@@ -743,6 +805,9 @@ test('目次・読書進捗・読書位置', '遅延画像の描画後に位置�
       getItem: key => saved.get(key) ?? null,
       setItem(key, value) { writes.push([key, value]); saved.set(key, value); }
     },
+    failedLocalStorageWrites: new Set(),
+    reportLocalStorageWrite(key, error) { throw error; },
+    confirmLocalStorageWrite(key) { context.failedLocalStorageWrites.delete(key); },
     getPositionStorageKey: () => 'position',
     document: { fonts: { ready: Promise.resolve() } },
     requestAnimationFrame(callback) { return setTimeout(callback, 0); },

@@ -1319,6 +1319,22 @@ SOFTWARE.
   const errorNoticeMessage = document.getElementById('error-notice-message');
   const btnCloseErrorNotice = document.getElementById('btn-close-error-notice');
   let errorNoticeTimer = null;
+  const failedLocalStorageWrites = new Set();
+
+  function reportLocalStorageWrite(key, error) {
+    if (!failedLocalStorageWrites.has(key)) {
+      failedLocalStorageWrites.add(key);
+      showErrorNotice('設定・読書位置を保存できませんでした。ブラウザーの保存領域を確認してください。復旧後、次の変更時に再保存します。');
+    }
+    console.error('ブラウザーの保存領域へ書き込めませんでした:', key, error);
+  }
+
+  function confirmLocalStorageWrite(key) {
+    failedLocalStorageWrites.delete(key);
+    if (failedLocalStorageWrites.size === 0 && errorNoticeMessage.textContent.startsWith('設定・読書位置を保存できませんでした。')) {
+      hideErrorNotice();
+    }
+  }
 
   function showErrorNotice(message) {
     errorNoticeMessage.textContent = message;
@@ -1994,7 +2010,10 @@ SOFTWARE.
   function saveSettings() {
     try {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(activeViewerSettings));
-    } catch (_) {}
+      confirmLocalStorageWrite(STORAGE_KEYS.SETTINGS);
+    } catch (error) {
+      reportLocalStorageWrite(STORAGE_KEYS.SETTINGS, error);
+    }
     scheduleHtmlExportSizeUpdate();
   }
 
@@ -2209,8 +2228,9 @@ SOFTWARE.
     // position data is never serialized into the exported HTML file itself.
     try {
       localStorage.setItem(getPositionStorageKey(), JSON.stringify(captureReadingPosition()));
+      confirmLocalStorageWrite(getPositionStorageKey());
     } catch (err) {
-      console.error('読書位置を保存できませんでした。ブラウザーの保存領域・プライベートモード・容量制限を確認してください。', err);
+      reportLocalStorageWrite(getPositionStorageKey(), err);
     }
   }
 
@@ -2238,7 +2258,10 @@ SOFTWARE.
       positionData.bgOffsetX = backgroundMediaOffsetX;
       positionData.bgOffsetY = backgroundMediaOffsetY;
       localStorage.setItem(getPositionStorageKey(), JSON.stringify(positionData));
-    } catch (_) {}
+      confirmLocalStorageWrite(getPositionStorageKey());
+    } catch (error) {
+      reportLocalStorageWrite(getPositionStorageKey(), error);
+    }
   }
 
   function updateReadingState() {
