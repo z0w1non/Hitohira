@@ -9,7 +9,7 @@ const os = require('node:os');
 const { createServer } = require('node:http');
 const { createHash } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
-const { dispatchKey, formatCaseLine, terminateBrowserTree } = require('./test_utils');
+const { dispatchKey, formatCaseLine, terminateBrowserTree, waitForCondition, createCdpClient } = require('./test_utils');
 
 const browserCandidates = [
   { name: 'Google Chrome', path: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' },
@@ -30,19 +30,19 @@ let activeCleanup = null;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function removeTemporaryProfile(profile) {
   let lastError;
-  for (let attempt = 0; attempt < 10; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+      fs.rmSync(profile, { recursive: true, force: true, maxRetries: 2, retryDelay: 100 });
       return;
     } catch (error) {
       lastError = error;
       if (!['EBUSY', 'EPERM', 'ENOTEMPTY'].includes(error.code)) throw error;
-      await sleep(500);
+      await sleep(100);
     }
   }
   throw lastError;
 }
-async function waitForDevToolsPort(profile, child, timeoutMs = 10000) {
+async function waitForDevToolsPort(profile, child, timeoutMs = 8000) {
   const portFile = path.join(profile, 'DevToolsActivePort');
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -77,18 +77,30 @@ async function waitForDevToolsPort(profile, child, timeoutMs = 10000) {
 }
 async function waitForTarget(port, expectedUrl) {
   let lastError = '';
-  for (let i = 0; i < 120; i++) {
-    try {
-      const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
-      const page = targets.find(target => target.type === 'page' && target.url === expectedUrl);
-      if (page) return page;
-    } catch (error) { lastError = `${error.message}${error.cause?.code ? ` (${error.cause.code})` : ''}`; }
-    await sleep(100);
+  try {
+    return await waitForCondition(async () => {
+      try {
+        const response = await fetch(`http://127.0.0.1:${port}/json`, { signal: AbortSignal.timeout(400) });
+        const targets = await response.json();
+        const page = targets.find(target => target.type === 'page' && target.url === expectedUrl);
+        if (page) return page;
+      } catch (error) { lastError = `${error.message}${error.cause?.code ? ` (${error.cause.code})` : ''}`; }
+      return false;
+    }, { timeoutMs: 8000, intervalMs: 50, message: 'CDPターゲット取得がタイムアウトしました' });
+  } catch (_) {
+    throw new Error(`CDPターゲットを取得できません (port=${port}, url=${expectedUrl}, lastError=${lastError || '対象ページなし'})`);
   }
-  throw new Error(`CDPターゲットを取得できません (port=${port}, url=${expectedUrl}, lastError=${lastError || '対象ページなし'})`);
 }
 
-function cdpPipe(input, output) {
+async function waitForSocketOpen(socket) {
+  await waitForCondition(() => {
+    if (socket.readyState === 1) return true;
+    if (socket.readyState === 3) throw new Error('CDP WebSocketが接続前に閉じました');
+    return false;
+  }, { timeoutMs: 5000, intervalMs: 25, message: 'CDP WebSocket接続がタイムアウトしました' });
+}
+
+function cdpPipe(input, output, onEvent = () => {}) {
   let id = 0;
   let buffer = '';
   let failure;
@@ -109,7 +121,8 @@ function cdpPipe(input, output) {
       buffer = buffer.slice(end + 1);
       try {
         const response = JSON.parse(frame);
-        pending.get(response.id)?.(null, response);
+        if (Number.isInteger(response.id)) pending.get(response.id)?.(null, response);
+        else onEvent(response);
       } catch (error) {
         fail(error);
       }
@@ -124,30 +137,16 @@ function cdpPipe(input, output) {
       if (error || response.error) reject(error || new Error(response.error.message));
       else resolve(response.result);
     };
-    const timeout = setTimeout(() => finish(new Error(`CDPパイプが応答しません (${method})`)), 10000);
+    const timeout = setTimeout(() => finish(new Error(`CDPパイプが応答しません (${method}, 8000ms)`)), 8000);
     pending.set(requestId, finish);
     input.write(JSON.stringify({ id: requestId, method, params, sessionId }) + '\0');
   });
 }
 
-function cdp(ws) {
-  let id = 0;
-  const pending = new Map();
-  ws.addEventListener('message', event => {
-    const message = JSON.parse(event.data);
-    if (message.id && pending.has(message.id)) {
-      pending.get(message.id)(message);
-      pending.delete(message.id);
-    }
-  });
-  return (method, params = {}) => new Promise((resolve, reject) => {
-    const requestId = ++id;
-    pending.set(requestId, message => message.error ? reject(new Error(message.error.message)) : resolve(message.result));
-    ws.send(JSON.stringify({ id: requestId, method, params }));
-  });
-}
-
 async function main() {
+  const testStartedAt = performance.now();
+  let lastTimingCheckpoint = testStartedAt;
+  const timingCheckpoints = [];
   const executable = { chrome: 'chrome.exe', edge: 'msedge.exe' };
   assert.ok(!requestedBrowser || Object.hasOwn(executable, requestedBrowser), 'NOVEL_VIEWER_BROWSER は chrome または edge を指定してください');
   const browser = browserCandidates.find(candidate =>
@@ -192,9 +191,20 @@ async function main() {
   try {
     // Given: 対象HTMLが読み込まれた読書画面。When: 利用者の操作を送る。Then: 可視状態を確認する。
     const categories = new Map();
+    let reportedCategory = '';
     const record = (category, name) => {
       if (!categories.has(category)) categories.set(category, []);
       categories.get(category).push(name);
+      if (process.env.NOVEL_VIEWER_TEST_TIMINGS === '1') {
+        const now = performance.now();
+        timingCheckpoints.push({ category, name, durationMs: Math.round(now - lastTimingCheckpoint) });
+        lastTimingCheckpoint = now;
+      }
+      if (reportedCategory !== category) {
+        reportedCategory = category;
+        console.log(`[----------] ${category}`);
+      }
+      console.log(formatCaseLine('ok', 'ブラウザー操作', `${category}.${name}`));
     };
     const connect = async (browserProfile = profile, startUrl = fileUrl) => {
       const args = [...browserArgs, `--user-data-dir=${browserProfile}`, usePipe ? 'about:blank' : startUrl];
@@ -218,8 +228,8 @@ async function main() {
           const port = requestedPort || await waitForDevToolsPort(browserProfile, child);
           const target = await waitForTarget(port, startUrl);
           ws = new WebSocket(target.webSocketDebuggerUrl);
-          await new Promise((resolve, reject) => { ws.addEventListener('open', resolve); ws.addEventListener('error', reject); });
-          send = cdp(ws);
+          await waitForSocketOpen(ws);
+          send = createCdpClient(ws, { timeoutMs: 8000 });
         }
       } catch (error) {
         throw new Error(`CDP接続に失敗しました (args=${JSON.stringify(args)}, url=${startUrl}): ${error.message}`, { cause: error });
@@ -231,29 +241,47 @@ async function main() {
       return send;
     };
     const connectIsolated = async (startUrl, browserProfile, options = {}) => {
-        const initialUrl = options.offline ? 'about:blank' : startUrl;
-        const isolatedArgs = [...headlessArgs, '--disable-gpu', ...sandboxArgs, '--no-first-run',
-        '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0', `--user-data-dir=${browserProfile}`, initialUrl];
-      const isolatedChild = spawn(browser.path, isolatedArgs, { stdio: ['ignore', 'ignore', 'pipe'] });
+      const initialUrl = options.offline || usePipe ? 'about:blank' : startUrl;
+      const isolatedCdpArgs = usePipe ? ['--remote-debugging-pipe'] : ['--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0'];
+      const isolatedStdio = usePipe ? ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'] : ['ignore', 'ignore', 'pipe'];
+      const isolatedArgs = [...headlessArgs, '--disable-gpu', ...sandboxArgs, '--no-first-run', ...edgeArgs,
+        ...isolatedCdpArgs, `--user-data-dir=${browserProfile}`, initialUrl];
+      const isolatedChild = spawn(browser.path, isolatedArgs, { stdio: isolatedStdio });
       const isolatedClosed = new Promise(resolve => isolatedChild.once('close', resolve));
       isolatedChild.stderr.on('data', chunk => { childError += chunk.toString(); });
       let isolatedSocket;
+      let isolatedSend;
+      const networkRequests = [];
       try {
         const standaloneHtml = fs.readFileSync(new URL(startUrl), 'utf8');
         assert.doesNotMatch(standaloneHtml, /<script\b[^>]*\bsrc\s*=/i, '単体HTMLが外部スクリプトを参照しています');
         assert.doesNotMatch(standaloneHtml, /<link\b[^>]*\brel\s*=\s*["']?stylesheet[^>]*\bhref\s*=/i, '単体HTMLが外部スタイルシートを参照しています');
-        const port = Number(requestedPort) || await waitForDevToolsPort(browserProfile, isolatedChild);
-        const target = await waitForTarget(port, initialUrl);
-        isolatedSocket = new WebSocket(target.webSocketDebuggerUrl);
-        await new Promise((resolve, reject) => { isolatedSocket.addEventListener('open', resolve); isolatedSocket.addEventListener('error', reject); });
-        const isolatedSend = cdp(isolatedSocket);
+        if (usePipe) {
+          const sendBrowser = cdpPipe(isolatedChild.stdio[3], isolatedChild.stdio[4], message => {
+            if (message.method === 'Network.requestWillBeSent') networkRequests.push(message.params.request.url);
+          });
+          const { targetInfos } = await sendBrowser('Target.getTargets');
+          const target = targetInfos.find(info => info.type === 'page' && info.url === 'about:blank');
+          assert.ok(target, '隔離プロファイルのCDPパイプから初期ページを取得できません');
+          const { sessionId } = await sendBrowser('Target.attachToTarget', { targetId: target.targetId, flatten: true });
+          isolatedSend = (method, params = {}) => sendBrowser(method, params, method.startsWith('Browser.') ? undefined : sessionId);
+        } else {
+          const port = Number(requestedPort) || await waitForDevToolsPort(browserProfile, isolatedChild);
+          const target = await waitForTarget(port, initialUrl);
+          isolatedSocket = new WebSocket(target.webSocketDebuggerUrl);
+          await waitForSocketOpen(isolatedSocket);
+          isolatedSend = createCdpClient(isolatedSocket, { timeoutMs: 8000 });
+          isolatedSocket.addEventListener('message', event => {
+            const message = JSON.parse(event.data);
+            if (message.method === 'Network.requestWillBeSent') networkRequests.push(message.params.request.url);
+          });
+        }
         await isolatedSend('Runtime.enable');
         await isolatedSend('Page.enable');
-        const networkRequests = [];
-        isolatedSocket.addEventListener('message', event => {
-          const message = JSON.parse(event.data);
-          if (message.method === 'Network.requestWillBeSent') networkRequests.push(message.params.request.url);
-        });
+        if (usePipe && !options.offline) {
+          const navigation = await isolatedSend('Page.navigate', { url: startUrl });
+          assert.ok(!navigation.errorText, navigation.errorText);
+        }
         if (options.offline) {
           await isolatedSend('Network.enable');
           await isolatedSend('Network.emulateNetworkConditions', {
@@ -281,14 +309,22 @@ async function main() {
         assert.ok(documentState.result.value.inlineApplicationScript);
         if (!options.exercise) assert.ok(documentState.result.value.text.includes('Hitohira'));
         await isolatedSend('Browser.close').catch(() => {});
-        isolatedSocket.close();
+        isolatedSocket?.close();
         isolatedSocket = null;
         terminateBrowserTree(isolatedChild);
-        await Promise.race([isolatedClosed, sleep(5000)]);
+        if (usePipe) {
+          isolatedChild.stdio[3]?.destroy();
+          isolatedChild.stdio[4]?.destroy();
+        }
+        await Promise.race([isolatedClosed, sleep(2000)]);
       } finally {
         isolatedSocket?.close();
         terminateBrowserTree(isolatedChild);
-        await Promise.race([isolatedClosed, sleep(5000)]);
+        if (usePipe) {
+          isolatedChild.stdio[3]?.destroy();
+          isolatedChild.stdio[4]?.destroy();
+        }
+        await Promise.race([isolatedClosed, sleep(2000)]);
         await removeTemporaryProfile(browserProfile);
       }
     };
@@ -296,7 +332,7 @@ async function main() {
       const closingChild = child;
       await command('Browser.close').catch(() => {});
       terminateBrowserTree(closingChild);
-      const exited = await Promise.race([childClosed.then(() => true), sleep(5000).then(() => false)]);
+      const exited = await Promise.race([childClosed.then(() => true), sleep(2000).then(() => false)]);
       assert.ok(exited, 'テスト用ブラウザーを終了できません');
       child = undefined;
       ws = undefined;
@@ -326,17 +362,13 @@ async function main() {
     const textRow = ['テキスト', 'btn-download-text-delete', 'btn-download-text'];
     const imageRow = ['画像', 'btn-download-image-delete', 'btn-download-image'];
     const videoRow = ['動画', 'btn-download-video-delete', 'btn-download-video'];
-    for (let i = 0; i < 30; i++) {
-      if (await evaluate('document.readyState === "complete" && !!document.getElementById("shortcut-modal")')) break;
-      await sleep(100);
-    }
-    assert.equal(await evaluate('!!document.getElementById("shortcut-modal")'), true, '本文ビューアーの初期化が完了しません');
-    let initialExportSize = '';
-    for (let i = 0; i < 100; i++) {
-      initialExportSize = await evaluate('document.getElementById("html-export-size").textContent');
-      if (initialExportSize !== '計算中') break;
-      await sleep(50);
-    }
+    await waitForCondition(() => evaluate('document.readyState === "complete" && !!document.getElementById("shortcut-modal")'), {
+      timeoutMs: 5000, intervalMs: 50, message: '本文ビューアーの初期化が完了しません'
+    });
+    const initialExportSize = await waitForCondition(async () => {
+      const value = await evaluate('document.getElementById("html-export-size").textContent');
+      return value !== '計算中' ? value : false;
+    }, { timeoutMs: 5000, intervalMs: 50, message: 'HTMLエクスポートサイズの計算が完了しません' });
     assert.match(initialExportSize, /^\d+(?:\.\d+)? (?:B|KB|MB|GB|TB)$/);
     record('起動・初期化', '対象HTMLの読み込みとDOM初期化');
     const defaultArticle = await evaluate('document.getElementById("novel-content").textContent.trim()');
@@ -462,17 +494,11 @@ async function main() {
     console.log(`  Wake Lock: ${enabledWakeStatus}`);
     record('起動・初期化', 'ブラウザーのWake Lock要求結果を表示');
 
-    await sleep(1000);
     await evaluate('document.getElementById("ctrl-show-progress").click()');
-    await sleep(100);
     await send('Page.reload', { ignoreCache: true });
-    let restored = false;
-    for (let i = 0; i < 40; i++) {
-      restored = await evaluate('document.readyState === "complete" && !!document.getElementById("ctrl-show-progress") && document.getElementById("ctrl-show-progress").checked');
-      if (restored) break;
-      await sleep(100);
-    }
-    assert.equal(restored, true, '再読み込み後に表示設定が復元されません');
+    await waitForCondition(() => evaluate('document.readyState === "complete" && !!document.getElementById("ctrl-show-progress") && document.getElementById("ctrl-show-progress").checked'), {
+      timeoutMs: 4000, intervalMs: 50, message: '再読み込み後に表示設定が復元されません'
+    });
     record('保存・復元', '再読み込み後に設定を復元');
     assert.equal(await evaluate('(async () => (await indexedDB.databases()).some(db => db.name === "hitohira_media_db"))()'), true, '媒体保存用IndexedDBが初期化されません');
     record('保存・復元', '媒体保存用IndexedDBを初期化');
@@ -480,14 +506,15 @@ async function main() {
     assert.equal(await evaluate('document.getElementById("btn-export-html").disabled'), false, 'HTMLエクスポート操作が無効です');
     record('エクスポート', 'HTMLエクスポート操作を有効化');
     assert.equal(await evaluate('(() => { document.getElementById("btn-export-html").click(); return true; })()'), true, 'HTMLエクスポート操作を実行できません');
-    await sleep(800);
+    await waitForCondition(() => fs.readdirSync(downloadPath).some(name => name.endsWith('.html')), {
+      timeoutMs: 5000, intervalMs: 50, message: 'HTMLエクスポートファイルが生成されません'
+    });
     const downloadedFiles = fs.readdirSync(downloadPath).filter(name => name.endsWith('.html'));
     assert.ok(downloadedFiles.length > 0, 'HTMLエクスポートファイルが生成されません');
     const downloadedHtmlBytes = fs.statSync(path.join(downloadPath, downloadedFiles[0])).size;
-    for (let i = 0; i < 100; i++) {
-      if (await evaluate('document.getElementById("html-export-size").textContent !== "計算中"')) break;
-      await sleep(50);
-    }
+    await waitForCondition(() => evaluate('document.getElementById("html-export-size").textContent !== "計算中"'), {
+      timeoutMs: 5000, intervalMs: 50, message: 'HTMLエクスポートサイズの表示が更新されません'
+    });
     assert.equal(await evaluate('document.getElementById("html-export-size").textContent'), formatFileSize(downloadedHtmlBytes),
       'HTMLエクスポート欄のサイズが実際のダウンロードと一致しません');
     record('エクスポート', 'HTMLエクスポート操作を実行');
@@ -550,7 +577,9 @@ async function main() {
       for (const type of ['dragEnter', 'dragOver', 'drop']) await send('Input.dispatchDragEvent', { ...drop, type });
     };
     await dropFile(textFixture);
-    await sleep(500);
+    await waitForCondition(() => evaluate('document.title === ".tmp-browser-text" && document.getElementById("novel-content").textContent.trim() === "ブラウザー操作テスト本文" && !!document.getElementById("btn-download-text")'), {
+      timeoutMs: 5000, intervalMs: 50, message: 'テキストファイルをドロップして本文へ反映できません'
+    });
     assert.equal(await evaluate('document.title'), '.tmp-browser-text', 'テキストファイルstemがタイトルへ反映されません');
     assert.equal(await evaluate('document.getElementById("novel-content").textContent.trim()'), 'ブラウザー操作テスト本文');
     assert.equal(await evaluate('document.querySelector("#btn-download-text").closest(".file-action-group").querySelector(".file-action-size").textContent'),
@@ -625,8 +654,9 @@ async function main() {
     const imagePath = path.join(root, 'Anima_00036_.png');
     if (fs.existsSync(imagePath)) {
       await dropFile(imagePath);
-      await sleep(800);
-      assert.equal(await evaluate('document.body.classList.contains("has-bg")'), true, '画像が背景へ反映されません');
+      await waitForCondition(() => evaluate('document.body.classList.contains("has-bg") && !!document.getElementById("btn-download-image")'), {
+        timeoutMs: 5000, intervalMs: 50, message: '画像が背景・保存データへ反映されません'
+      });
       record('インポート', '画像ファイルをドロップして背景へ反映');
     assert.equal(await evaluate('(async () => new Promise((resolve, reject) => { const request = indexedDB.open("hitohira_media_db"); request.onerror = () => reject(request.error); request.onsuccess = () => { const db = request.result; const tx = db.transaction("background_media", "readonly"); const get = tx.objectStore("background_media").get("current"); get.onsuccess = () => { resolve(!!get.result && get.result.mediaType === "image" && get.result.blob instanceof Blob); }; get.onerror = () => reject(get.error); }; }))()'), true, '画像がIndexedDBへ保存されません');
       record('保存・復元', '画像をIndexedDBへ保存');
@@ -708,7 +738,9 @@ async function main() {
       assert.equal(await indicatorVisible(), false, 'タッチ中断後も縮小図が表示されています');
       record('背景操作', 'タッチで背景を移動し、終了・中断で縮小図を閉じる');
       await evaluate('document.getElementById("btn-export-html").click()');
-      await sleep(800);
+      await waitForCondition(() => fs.readdirSync(downloadPath).some(name => name.endsWith('.html')), {
+        timeoutMs: 5000, intervalMs: 50, message: '画像付きHTMLが生成されません'
+      });
       const exportedHtmlFiles = fs.readdirSync(downloadPath).filter(name => name.endsWith('.html'));
       assert.ok(exportedHtmlFiles.length > 0, '画像付きHTMLが生成されません');
       const latestExport = exportedHtmlFiles
@@ -722,8 +754,9 @@ async function main() {
       record('メディア・エクスポート', '画像Data URLをHTMLへ埋め込む');
       assert.deepEqual(await exportRows(), [textRow, imageRow]);
       await evaluate('document.querySelector("#btn-download-image-delete svg path").dispatchEvent(new MouseEvent("click", { bubbles: true }))');
-      await sleep(300);
-      assert.equal(await evaluate('document.body.classList.contains("has-bg")'), false, '画像削除が画面へ反映されません');
+      await waitForCondition(() => evaluate('!document.body.classList.contains("has-bg")'), {
+        timeoutMs: 3000, intervalMs: 50, message: '画像削除が画面へ反映されません'
+      });
       assert.deepEqual(await exportRows(), [textRow]);
       record('メディア・エクスポート', 'SVG子要素からの委譲クリックで画像を削除し、行を同期');
 
@@ -855,7 +888,9 @@ async function main() {
       const reloadedDocument = await send('DOM.getDocument', { depth: -1 });
       const reloadedInput = await send('DOM.querySelector', { nodeId: reloadedDocument.root.nodeId, selector: '#file-input' });
       await send('DOM.setFileInputFiles', { nodeId: reloadedInput.nodeId, files: [videoPath] });
-      await sleep(1000);
+      await waitForCondition(() => evaluate('document.body.classList.contains("video-bg") && document.getElementById("background-video")?.readyState >= 3 && !document.getElementById("background-video").paused'), {
+        timeoutMs: 5000, intervalMs: 50, message: '背景動画の読み込み・再生が完了しません'
+      });
       assert.equal(await evaluate('document.body.classList.contains("video-bg")'), true, '動画が背景へ反映されません');
       assert.equal(await evaluate('document.getElementById("background-video").muted'), true, '背景動画がミュートされません');
       assert.equal(await evaluate('document.getElementById("background-video").loop'), true, '背景動画がループされません');
@@ -1036,15 +1071,33 @@ async function main() {
     record('設定', 'テーマ切り替えで個別色を保持し、既定色は切り替え先の既定色に更新');
     await evaluate('document.querySelector("#ctrl-writing-mode button[data-value=vertical]").click()');
     assert.equal(await evaluate('document.documentElement.dataset.writingMode'), 'vertical', '縦書き切替を操作できません');
+    assert.equal(await evaluate('document.querySelector("#ctrl-writing-mode button[data-value=vertical]").getAttribute("aria-pressed")'), 'true', '縦書きアイコンの選択状態が支援技術へ反映されません');
     record('設定', '書字方向切替');
     await evaluate('document.querySelector("#ctrl-font button[data-value=sans]").click()');
     assert.equal(await evaluate('document.querySelector("#ctrl-font button[data-value=sans]").classList.contains("is-active")'), true, 'フォント切替を操作できません');
+    assert.equal(await evaluate('document.querySelector("#ctrl-font button[data-value=sans]").textContent.trim()'), 'ゴ', 'ゴシック体アイコンの表示が誤っています');
+    assert.equal(await evaluate('document.querySelector("#ctrl-font button[data-value=sans]").getAttribute("aria-pressed")'), 'true', '書体アイコンの選択状態が支援技術へ反映されません');
+    assert.deepEqual(await evaluate(`(() => {
+      const buttons = [...document.querySelectorAll('#ctrl-writing-mode button, #ctrl-font button')];
+      const boxes = buttons.map(button => button.getBoundingClientRect());
+      const divider = document.querySelector('.icon-control-divider').getBoundingClientRect();
+      const row = document.querySelector('.icon-control-row').getBoundingClientRect();
+      const fontGroup = document.querySelector('.icon-control-font-group').getBoundingClientRect();
+      return {
+        square: boxes.every(box => Math.abs(box.width - box.height) <= 1),
+        sameRow: Math.max(...boxes.map(box => box.top)) - Math.min(...boxes.map(box => box.top)) <= 1,
+        dividerBetweenGroups: divider.left > boxes[1].right && divider.right < boxes[2].left,
+        dividerCentered: Math.abs((divider.left + divider.right) / 2 - (row.left + row.right) / 2) <= 1,
+        fontRightAligned: Math.abs(fontGroup.right - row.right) <= 1
+      };
+    })()`), { square: true, sameRow: true, dividerBetweenGroups: true, dividerCentered: true, fontRightAligned: true }, '書字方向・書体アイコンの正方形、同一行、縦棒の中央配置、書体の右寄せが不正です');
     record('設定', 'フォント切替');
     assert.equal(await evaluate('document.getElementById("ctrl-show-progress").checked'), true, '進捗表示切替を操作できません');
     record('設定', '進捗表示切替');
     await evaluate('document.getElementById("btn-reset-all").click()');
-    await sleep(100);
-    assert.equal(await evaluate('document.getElementById("btn-reset-all").disabled'), true, '設定初期化後にボタンが無効化されません');
+    await waitForCondition(() => evaluate('document.getElementById("btn-reset-all").disabled'), {
+      timeoutMs: 3000, intervalMs: 50, message: '設定初期化後にボタンが無効化されません'
+    });
     record('設定', '設定初期化');
 
     await evaluate('document.getElementById("viewer-container").focus()');
@@ -1064,13 +1117,9 @@ async function main() {
         `<p>Hitohira 章${chapter + 1}・段落${paragraph + 1}。${'窓から差し込む光が、机の上をゆっくり移動した。'.repeat(7)}<ruby>光<rt>ひかり</rt></ruby></p>`).join('')).join('');
     fs.writeFileSync(readingDocument, chapters, 'utf8');
     const readingUrl = pathToFileURL(readingViewer).href;
-    const waitForReading = async (condition, message) => {
-      for (let i = 0; i < 50; i++) {
-        if (await evaluate(condition)) return;
-        await sleep(100);
-      }
-      assert.fail(message);
-    };
+    const waitForReading = (condition, message) => waitForCondition(
+      () => evaluate(condition), { timeoutMs: 5000, intervalMs: 50, message }
+    );
     await send('Page.navigate', { url: readingUrl });
     await waitForReading(`location.href === ${JSON.stringify(readingUrl)} && document.readyState === 'complete'`, '読書位置の検証用ビューアを開けません');
     await evaluate('document.querySelector("#ctrl-writing-mode button[data-value=horizontal]").click()');
@@ -1143,7 +1192,7 @@ async function main() {
     const narrowPage = await evaluate('({ width: document.documentElement.scrollWidth, viewport: innerWidth })');
     assert.ok(narrowPage.width <= 320 && narrowPage.viewport === 320, '幅320pxでページが横にはみ出します');
     await tapElement('#btn-open-settings');
-    await waitForReading('getComputedStyle(document.getElementById("settings-drawer")).visibility === "visible" && Math.abs(document.getElementById("settings-drawer").getBoundingClientRect().right - innerWidth) <= 2', '狭い画面でタッチして設定を開けません');
+    await waitForReading('getComputedStyle(document.getElementById("settings-drawer")).visibility === "visible" && Math.abs(document.getElementById("settings-drawer").getBoundingClientRect().right - innerWidth) <= 0.25', '設定ドロワーの開閉アニメーションが完了しません');
     const settingsGeometry = await responsiveState('settings-drawer');
     assert.deepEqual(settingsGeometry.viewport, [320, 640]);
     assert.equal(settingsGeometry.documentWidth, 320);
@@ -1153,9 +1202,9 @@ async function main() {
     await tapElement('#btn-close-settings');
     await waitForReading('getComputedStyle(document.getElementById("settings-drawer")).visibility === "hidden"', 'タッチで設定を閉じられません');
     await tapElement('#btn-open-settings');
-    await waitForReading('getComputedStyle(document.getElementById("settings-drawer")).visibility === "visible" && Math.abs(document.getElementById("settings-drawer").getBoundingClientRect().right - innerWidth) <= 2', '設定ドロワーを再度開けません');
+    await waitForReading('getComputedStyle(document.getElementById("settings-drawer")).visibility === "visible" && Math.abs(document.getElementById("settings-drawer").getBoundingClientRect().right - innerWidth) <= 0.25', '設定ドロワーの再表示アニメーションが完了しません');
     await tapElement('#btn-open-toc');
-    await waitForReading('getComputedStyle(document.getElementById("toc-drawer")).visibility === "visible" && Math.abs(document.getElementById("toc-drawer").getBoundingClientRect().right - innerWidth) <= 2', '狭い画面でタッチして目次を開けません');
+    await waitForReading('getComputedStyle(document.getElementById("toc-drawer")).visibility === "visible" && Math.abs(document.getElementById("toc-drawer").getBoundingClientRect().right - innerWidth) <= 0.25', '目次ドロワーの開閉アニメーションが完了しません');
     const tocGeometry = await responsiveState('toc-drawer');
     assert.ok(tocGeometry.panel[0] >= -1 && tocGeometry.panel[2] <= 321 && tocGeometry.panel[3] <= 640,
       '目次ドロワーが狭い画面からはみ出します');
@@ -1212,8 +1261,9 @@ async function main() {
       await send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', buttons: 1, clickCount, ...wordPoint });
       await send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', buttons: 0, clickCount, ...wordPoint });
     }
-    await sleep(300);
-    assert.equal(await evaluate('window.getSelection().toString().trim()'), 'Hitohira');
+    await waitForCondition(() => evaluate('window.getSelection().toString().trim() === "Hitohira"'), {
+      timeoutMs: 2000, intervalMs: 25, message: 'ブラウザーの単語選択が反映されません'
+    });
     assert.equal(await evaluate(`${viewer}.scrollTop`), selectionScrollTop);
     const paddingPoint = await evaluate(`(() => {
       const rect = document.getElementById('novel-content').getBoundingClientRect();
@@ -1286,11 +1336,10 @@ async function main() {
         ['HTMLのエクスポートに失敗しました:', 'export-test-detail'],
         ['テキストのダウンロードに失敗しました:', 'export-test-detail']
       ]);
-      await sleep(1000);
-      assert.equal(await evaluate('document.getElementById("error-notice").hidden'), false, '通知が早く閉じました');
-      await waitForReading('document.getElementById("error-notice").hidden', '通知が自動で閉じません');
+      await evaluate('document.getElementById("btn-close-error-notice").click()');
+      assert.equal(await evaluate('document.getElementById("error-notice").hidden'), true, '閉じる操作で失敗通知が消えません');
       assert.deepEqual(fs.readdirSync(failureDownloads), [], '失敗時に不完全なファイルが生成されました');
-      record('エクスポート', '失敗を通知して自動閉鎖し、例外の詳細をログに残す');
+      record('エクスポート', '失敗を通知し、手動閉鎖と例外ログを確認');
     } finally {
       await evaluate('window.exportFailureProbe.restore(); delete window.exportFailureProbe');
       await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath });
@@ -1563,45 +1612,32 @@ async function main() {
     record('エクスポート', '元ブラウザーを終了し、新規プロファイルでHTML単体の起動と元ファイルの一致を確認');
     }
 
-    let total = 0;
-    for (const [category, cases] of categories) {
-      console.log(`[----------] ${category}`);
-      for (const name of cases) {
-        total++;
-        console.log(formatCaseLine('run', 'ブラウザー操作', `${category}.${name}`));
-        console.log(formatCaseLine('ok', 'ブラウザー操作', `${category}.${name}`));
+    const total = [...categories.values()].reduce((count, cases) => count + cases.length, 0);
+    if (process.env.NOVEL_VIEWER_TEST_TIMINGS === '1') {
+      console.log(`[ TIMER    ] ブラウザーテスト本体: ${Math.round(performance.now() - testStartedAt)} ms`);
+      for (const item of timingCheckpoints.sort((a, b) => b.durationMs - a.durationMs).slice(0, 8)) {
+        console.log(`[ TIMER    ] ${item.category}.${item.name}: ${item.durationMs} ms (前チェックポイントから)`);
       }
     }
     console.log(`[==========] ${total} tests ran.`);
     console.log(`[  PASSED  ] ${total} tests.`);
   } finally {
+    const cleanupStartedAt = performance.now();
     await activeCleanup();
     activeCleanup = null;
+    if (process.env.NOVEL_VIEWER_TEST_TIMINGS === '1') {
+      console.log(`[ TIMER    ] テスト終了処理: ${Math.round(performance.now() - cleanupStartedAt)} ms`);
+    }
   }
 }
 
-let browserAttempt = 0;
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.once(signal, () => {
     Promise.resolve(activeCleanup?.())
       .finally(() => process.exit(130));
   });
 }
-async function runBrowserTest() {
-  try { return await main(); }
-  catch (error) {
-    if (/CDPターゲットを取得できません/.test(error.message) && browserAttempt < 1) {
-      browserAttempt++;
-      childError = '';
-      childExit = null;
-      await sleep(300);
-      return runBrowserTest();
-    }
-    throw error;
-  }
-}
-
-runBrowserTest().catch(error => {
+main().catch(error => {
   console.error(`[  FAILED  ] ブラウザー操作.実行 (終了コード: 1)\n  ${error.stack || error.message}`);
   if (childExit) console.error(`  Browser exit: code=${childExit.code}, signal=${childExit.signal || 'none'}`);
   if (childError.trim()) console.error(`  Browser stderr: ${childError.trim()}`);

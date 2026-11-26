@@ -42,18 +42,16 @@ function Invoke-TestScript([string]$Name) {
         $savedErrorAction = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
         $captured = [System.Collections.Generic.List[string]]::new()
-        $childOutput = @(& $Node $script 2>&1)
-        $nativeExitCode = $LASTEXITCODE
-        $ErrorActionPreference = $savedErrorAction
-        foreach ($entry in $childOutput) {
-            $_ = $entry
+        & $Node $script 2>&1 | ForEach-Object {
             $line = [string]$_
             $captured.Add($line)
             Write-TestLine $line
         }
+        $nativeExitCode = $LASTEXITCODE
+        $ErrorActionPreference = $savedErrorAction
         $output = $captured -join "`n"
         $code = if ($null -eq $nativeExitCode) { 0 } else { [int]$nativeExitCode }
-        if ($childOutput.Count -eq 0 -and $code -lt 0) { $code = 1 }
+        if ($captured.Count -eq 0 -and $code -lt 0) { $code = 1 }
     } catch {
         if ($null -ne $savedErrorAction) { $ErrorActionPreference = $savedErrorAction }
         $code = 1
@@ -80,7 +78,8 @@ function Invoke-TestScript([string]$Name) {
 try {
     Push-Location $root
     $savedSandbox = $env:NOVEL_VIEWER_DISABLE_SANDBOX
-    if ($DisableSandbox) { $env:NOVEL_VIEWER_DISABLE_SANDBOX = '1' } else { Remove-Item Env:NOVEL_VIEWER_DISABLE_SANDBOX -ErrorAction SilentlyContinue }
+    if ($DisableSandbox) { $env:NOVEL_VIEWER_DISABLE_SANDBOX = '1' }
+    elseif ($savedSandbox -ne '1') { Remove-Item Env:NOVEL_VIEWER_DISABLE_SANDBOX -ErrorAction SilentlyContinue }
     $savedShowBrowser = $env:NOVEL_VIEWER_SHOW_BROWSER
     if ($ShowBrowser) { $env:NOVEL_VIEWER_SHOW_BROWSER = '1' } else { Remove-Item Env:NOVEL_VIEWER_SHOW_BROWSER -ErrorAction SilentlyContinue }
     $success = $true

@@ -7,7 +7,7 @@ metadata:
 
 # ノベルビューア リファクタリングスキル
 
-`novel_viewer.html`、`docs/novel_viewer_spec_revised.md`、`AGENTS.md`を同時に扱うリファクタリングで使用する。機能追加そのものではなく、既存機能を維持しながら構造・用語・仕様の不整合を整理することを目的とする。
+`hitohira.html`、`docs/SPECIFICATION.md`、`AGENTS.md`を同時に扱うリファクタリングで使用する。機能追加そのものではなく、既存機能を維持しながら構造・用語・仕様の不整合を整理することを目的とする。
 
 ## 基本手順
 

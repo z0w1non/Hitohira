@@ -5,11 +5,15 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { File } = require('node:buffer');
 const { webcrypto } = require('node:crypto');
-const { loadFunctionsFromHtml, formatCaseLine, assertUniqueHtmlIds, assertIconButtonsAccessible } = require('./test_utils');
+const { loadFunctionsFromHtml, formatCaseLine, assertUniqueHtmlIds, assertIconButtonsAccessible, createCdpClient, waitForCondition } = require('./test_utils');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'hitohira.html'), 'utf8');
 const spec = fs.readFileSync(path.join(__dirname, '..', 'docs', 'SPECIFICATION.md'), 'utf8');
 const issueTable = fs.readFileSync(path.join(__dirname, '..', 'docs', 'ISSUES.md'), 'utf8');
+const knowledgeTable = fs.readFileSync(path.join(__dirname, '..', 'docs', 'DEVELOPMENT_KNOWLEDGE.md'), 'utf8');
+const docsIndex = fs.readFileSync(path.join(__dirname, '..', 'docs', 'README.md'), 'utf8');
+const testingGuide = fs.readFileSync(path.join(__dirname, '..', 'docs', 'TESTING.md'), 'utf8');
+const decisions = fs.readFileSync(path.join(__dirname, '..', 'docs', 'DECISIONS.md'), 'utf8');
 const testSkill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'novel-viewer-tests', 'SKILL.md'), 'utf8');
 const agents = fs.readFileSync(path.join(__dirname, '..', 'AGENTS.md'), 'utf8');
 const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
@@ -17,6 +21,61 @@ const tests = [];
 const test = (suite, name, run) => tests.push({ suite, name, run });
 const load = (start, end, names, globals) => loadFunctionsFromHtml(html, start, end, names, globals);
 const convert = () => load('function processPunctuation', 'function analyzeImageAndComputeAuto', ['plainTextToSafeHTML']).plainTextToSafeHTML;
+
+test('設定', '書字方向と書体の選択状態をアクセシブルな押下状態へ同期する', () => {
+  const buttons = ['horizontal', 'vertical'].map(value => ({
+    dataset: { value },
+    attributes: {},
+    classList: {
+      active: value === 'horizontal',
+      toggle(name, enabled) { if (name === 'is-active') this.active = enabled; }
+    },
+    setAttribute(name, state) { this.attributes[name] = state; }
+  }));
+  const container = { querySelectorAll: () => buttons };
+  const { syncSegmented } = load('function syncSegmented', 'function saveSettings', ['syncSegmented']);
+
+  syncSegmented(container, 'vertical');
+
+  assert.deepEqual(buttons.map(button => button.classList.active), [false, true]);
+  assert.deepEqual(buttons.map(button => button.attributes['aria-pressed']), ['false', 'true']);
+  assert.match(html, /id="ctrl-writing-mode"[^>]*aria-label="書字方向"/);
+  assert.match(html, /id="ctrl-font"[^>]*aria-label="書体"/);
+  assert.match(html, /data-value="serif"[^>]*aria-label="明朝体"[^>]*>明<\/button>/);
+  assert.match(html, /data-value="sans"[^>]*aria-label="ゴシック体"[^>]*>ゴ<\/button>/);
+  assert.match(html, /\.segmented-control\.font-control button\[data-value="serif"\]\s*\{\s*font-family:[^}]*serif;/);
+  assert.match(html, /\.segmented-control\.font-control button\[data-value="sans"\]\s*\{\s*font-family:[^}]*sans-serif;/);
+  assert.match(html, /class="icon-control-row"[\s\S]*id="ctrl-writing-mode"[\s\S]*class="icon-control-divider"[^>]*role="separator"[\s\S]*id="ctrl-font"/);
+  assert.match(html, /\.icon-control-row\s*\{[^}]*display:\s*flex/);
+  assert.match(html, /\.icon-control-row\s+\.segmented-control button\s*\{[^}]*width:\s*40px[^}]*height:\s*40px/);
+});
+
+test('ブラウザー操作基盤', 'CDP応答が止まった場合に期限で失敗し、切断時は保留要求をすぐ解除する', async () => {
+  const socket = new EventTarget();
+  socket.send = () => {};
+  const send = createCdpClient(socket, { timeoutMs: 30 });
+  await assert.rejects(send('Runtime.evaluate'), /CDP応答タイムアウト.*Runtime\.evaluate/);
+
+  const pending = send('Page.enable');
+  socket.dispatchEvent(new Event('close'));
+  await assert.rejects(pending, /CDP接続が閉じました/);
+  await assert.rejects(send('Network.enable'), /CDP接続が閉じました/);
+});
+
+test('ブラウザー操作基盤', '状態ポーリングは条件成立時に早く終わり、期限を超えると理由を示す', async () => {
+  let attempts = 0;
+  const value = await waitForCondition(async () => ++attempts === 3, {
+    timeoutMs: 500, intervalMs: 1, message: 'テスト条件が成立しません'
+  });
+  assert.equal(value, true);
+  assert.equal(attempts, 3);
+  await assert.rejects(waitForCondition(() => false, {
+    timeoutMs: 10, intervalMs: 1, message: '状態待ちがタイムアウトしました'
+  }), /状態待ちがタイムアウトしました/);
+  await assert.rejects(waitForCondition(() => new Promise(() => {}), {
+    timeoutMs: 10, message: '状態確認の応答自体が停止しました'
+  }), /状態確認の応答自体が停止しました/);
+});
 
 test('テスト基盤', '課題表には完了条件を持つ未解決行だけが優先度順で並ぶ', () => {
   const [header, separator, ...rows] = issueTable.split(/\r?\n/)
@@ -46,10 +105,64 @@ test('テスト基盤', '課題表には完了条件を持つ未解決行だけ�
     }
   }
 });
+test('テスト基盤', '開発知見表の列・ID・根拠・適用範囲・制約・再確認条件が揃う', () => {
+  const section = knowledgeTable.split('## 知見一覧')[1];
+  assert.ok(section, '知見一覧がありません');
+  const rows = section.split(/\r?\n/).filter(line => line.startsWith('|'))
+    .map(line => line.trim().slice(1, -1).split(/(?<!\\)\|/).map(cell => cell.trim()));
+  const [header, separator, ...entries] = rows;
+  assert.deepEqual(header, ['ID', '確認日', '分類・対象', '知見', '根拠・確認方法', '適用範囲', '制約・注意', '再確認条件', '関連資料']);
+  assert.equal(separator.length, header.length);
+  assert.ok(entries.length > 0, '知見が登録されていません');
+  const ids = new Set();
+  for (const entry of entries) {
+    assert.equal(entry.length, header.length);
+    assert.ok(entry.every(Boolean), entry[0]);
+    assert.match(entry[0], /^K-\d{3}$/);
+    assert.ok(!ids.has(entry[0]), `知見IDが重複しています: ${entry[0]}`);
+    ids.add(entry[0]);
+    assert.match(entry[1], /^\d{4}-\d{2}-\d{2}$/);
+  }
+  assert.ok(agents.includes('./docs/DEVELOPMENT_KNOWLEDGE.md'));
+});
+test('テスト基盤', '開発資料一覧の相対リンクが実在する資料を指す', () => {
+  const links = [...docsIndex.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)].map(match => match[1]);
+  assert.ok(links.length > 0);
+  for (const link of links) {
+    assert.doesNotMatch(link, /^https?:/i, `外部リンクはこの資料一覧の対象外です: ${link}`);
+    const target = link.split('#')[0];
+    assert.ok(fs.existsSync(path.resolve(__dirname, '..', 'docs', target)), `資料リンクが見つかりません: ${link}`);
+  }
+  assert.doesNotMatch(testSkill + readme, /docs\/novel_viewer_spec_revised\.md/);
+});
+test('テスト基盤', '設計決定表に判断理由・影響・再検討条件と有効な参照先がある', () => {
+  const section = decisions.split('## 決定一覧')[1];
+  assert.ok(section, '決定一覧がありません');
+  const rows = section.split(/\r?\n/).filter(line => line.startsWith('|'))
+    .map(line => line.trim().slice(1, -1).split(/(?<!\\)\|/).map(cell => cell.trim()));
+  const [header, separator, ...entries] = rows;
+  assert.deepEqual(header, ['ID', '記録日', '状態', '決定', '背景・論点', '判断理由', '影響・制約', '再検討条件', '関連資料']);
+  assert.equal(separator.length, header.length);
+  assert.ok(entries.length > 0, '設計決定がありません');
+  const ids = new Set();
+  for (const entry of entries) {
+    assert.equal(entry.length, header.length);
+    assert.ok(entry.every(Boolean), entry[0]);
+    assert.match(entry[0], /^ADR-\d{3}$/);
+    assert.ok(!ids.has(entry[0]), `設計決定IDが重複しています: ${entry[0]}`);
+    ids.add(entry[0]);
+    assert.match(entry[2], /^(採用|廃止)$/);
+  }
+  for (const [, target] of decisions.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)) {
+    const pathPart = target.split('#')[0];
+    assert.ok(fs.existsSync(path.resolve(__dirname, '..', 'docs', pathPart)), `設計決定の参照先が見つかりません: ${target}`);
+  }
+  assert.ok(agents.includes('./docs/DECISIONS.md'));
+});
 test('テスト基盤', 'テスト後の副作用を成否に関わらず除去する方針がある', () => {
   assert.ok(testSkill.includes('成否・例外・中断に関わらず環境を復元する'));
   assert.ok(agents.includes('成否や例外に関わらず'));
-  assert.ok(spec.includes('成否に関わらず'));
+  assert.ok(testingGuide.includes('正常終了・失敗・例外・中断を問わず'));
 });
 test('テスト基盤', '製品の実行時ネットワーク不要方針が仕様にある', () => {
   assert.ok(spec.includes('実行時にネットワーク接続を要求しない'));
@@ -275,7 +388,11 @@ function importFixture(storeText = () => {}, options = {}) {
   const { handleFiles, getExportSource } = load('function getImportFailureReason', "btnImportFile.addEventListener('click'",
     ['handleFiles', 'getExportSource: () => ({ blob: importedTextFileBlob, extension: importedTextFileExtension })'], {
     readTextFile, getFileExtension, getFileStem, plainTextToSafeHTML: convert(),
-    sanitizeHTML: markup => markup,
+    sanitizeHTML: markup => {
+      options.sanitizedInputs?.push(markup);
+      return options.sanitize ? options.sanitize(markup) : markup;
+    },
+    DOMParser: options.DOMParser,
     importedTextFileBlob: null, importedTextFileExtension: '',
     async storeImportedText(blob, extension) {
       await storeText(blob, extension);
@@ -306,6 +423,49 @@ function importFixture(storeText = () => {}, options = {}) {
     showErrorNotice: message => notices.push(message)
   });
   return { handleFiles, getExportSource, content, viewer, settings, storage, notices, originals, mediaWrites, mediaSelections };
+}
+
+for (const scenario of [
+  {
+    name: 'HTML内に#novel-contentがあればbodyより優先して本文・題名・保存内容へ反映する',
+    articleHtml: '<h1>作品本文</h1><p>続き</p>',
+    bodyHtml: '<p>本文ではないナビゲーション</p>',
+    expectedHtml: '<h1>作品本文</h1><p>続き</p>'
+  },
+  {
+    name: '#novel-contentがないHTMLではbodyを本文として取り込む',
+    articleHtml: null,
+    bodyHtml: '<h2>本文へフォールバック</h2><p>段落</p>',
+    expectedHtml: '<h2>本文へフォールバック</h2><p>段落</p>'
+  }
+]) {
+  test('インポート', scenario.name, async () => {
+    const sanitizedInputs = [];
+    const parsedDocument = {
+      title: ' 章タイトル ',
+      body: { innerHTML: scenario.bodyHtml },
+      querySelector(selector) { return selector === '#novel-content' && scenario.articleHtml !== null
+        ? { innerHTML: scenario.articleHtml }
+        : null; }
+    };
+    class HtmlParser {
+      parseFromString(source, mimeType) {
+        assert.equal(source, '<html>raw source</html>');
+        assert.equal(mimeType, 'text/html');
+        return parsedDocument;
+      }
+    }
+    const fixture = importFixture(() => {}, { DOMParser: HtmlParser, sanitizedInputs });
+    await fixture.handleFiles([new File(['<html>raw source</html>'], 'chapter.html', { type: 'text/html' })]);
+    assert.deepEqual(sanitizedInputs, [scenario.expectedHtml]);
+    assert.equal(fixture.content.innerHTML, scenario.expectedHtml);
+    assert.equal(fixture.storage.get('content'), scenario.expectedHtml);
+    assert.equal(fixture.settings.documentTitle, '章タイトル');
+    assert.equal(fixture.settings.fileStem, 'chapter');
+    assert.equal(fixture.originals.length, 1);
+    assert.equal(fixture.originals[0].extension, '.html');
+    assert.deepEqual(fixture.notices, []);
+  });
 }
 
 test('インポート', 'Markdownを取り込むと先頭へ移動し、元ファイルのバイト列を別に保存する', async () => {
@@ -1460,27 +1620,33 @@ function timerFixture() {
 }
 
 test('初期表示', '通知を更新すると閉鎖を延期し、最新の通知を5秒後に閉じる', () => {
-  const clock = timerFixture();
+  const firstClock = timerFixture();
+  const updatedClock = timerFixture();
   const notice = { hidden: true };
   const message = {};
   const { showErrorNotice, hideErrorNotice } = load('function showErrorNotice', 'btnCloseErrorNotice.addEventListener',
     ['showErrorNotice', 'hideErrorNotice'], {
       errorNotice: notice, errorNoticeMessage: message, errorNoticeTimer: null,
-      setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout
+      errorNoticeTimerCancel: () => {}, errorNoticeTimerDependencies: {
+        setTimeout: () => assert.fail('既定タイマーが予期せず使用されました'),
+        clearTimeout: () => assert.fail('既定タイマー解除が予期せず使用されました')
+      },
+      setTimeout: () => assert.fail('注入した通知タイマーが使われません'),
+      clearTimeout: () => assert.fail('注入した通知タイマーの解除関数が使われません')
     });
-  showErrorNotice('最初の通知');
-  const first = [...clock.pending.keys()][0];
-  showErrorNotice('更新した通知');
+  showErrorNotice('最初の通知', firstClock);
+  const first = [...firstClock.pending.keys()][0];
+  showErrorNotice('更新した通知', updatedClock);
   assert.equal(notice.hidden, false);
   assert.equal(message.textContent, '更新した通知');
-  assert.equal(clock.pending.has(first), false);
-  assert.deepEqual([...clock.pending.values()].map(timer => timer.delay), [5000]);
-  clock.run();
+  assert.equal(firstClock.pending.has(first), false);
+  assert.deepEqual([...updatedClock.pending.values()].map(timer => timer.delay), [5000]);
+  updatedClock.run();
   assert.equal(notice.hidden, true);
-  showErrorNotice('手動で閉じる通知');
+  showErrorNotice('手動で閉じる通知', firstClock);
   hideErrorNotice();
   assert.equal(notice.hidden, true);
-  assert.equal(clock.pending.size, 0);
+  assert.equal(firstClock.pending.size, 0);
 });
 
 test('目次', '見出しから項目を作成し、選択した位置へ移動して現在の項目を強調する', () => {

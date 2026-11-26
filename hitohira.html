@@ -495,6 +495,83 @@ SOFTWARE.
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
   }
 
+  .segmented-control button svg {
+    display: block;
+    width: 18px;
+    height: 18px;
+    margin: 0 auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+  }
+
+  .icon-control-row {
+    display: flex;
+    align-items: center;
+    justify-content: stretch;
+  }
+
+  .icon-control-group {
+    display: flex;
+    flex: 1 1 50%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .icon-control-group:first-child {
+    padding-right: 10px;
+  }
+
+  .icon-control-group .segmented-control {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .icon-control-row .segmented-control button {
+    display: grid;
+    width: 100%;
+    height: 40px;
+    padding: 0;
+    place-items: center;
+  }
+
+  .icon-control-divider {
+    align-self: flex-end;
+    flex: 0 0 1px;
+    height: 40px;
+    margin-bottom: 0;
+    background-color: var(--border-color);
+  }
+
+  .icon-control-font-group {
+    align-items: flex-start;
+    padding-left: 10px;
+  }
+
+  .icon-control-group:first-child {
+    padding-right: 10px;
+  }
+
+  .icon-control-font-group .control-label,
+  .icon-control-group:first-child .control-label {
+    min-height: 15px;
+  }
+
+  .segmented-control.font-control button {
+    font-size: 16px;
+    line-height: 18px;
+  }
+
+  .segmented-control.font-control button[data-value="serif"] {
+    font-family: "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
+  }
+
+  .segmented-control.font-control button[data-value="sans"] {
+    font-family: "Yu Gothic", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+  }
+
   input[type="range"] {
     width: 100%;
     accent-color: var(--text-secondary);
@@ -835,18 +912,26 @@ SOFTWARE.
 
     <div class="drawer-body">
       <div class="control-group">
-        <div class="control-label"><span>書字方向</span></div>
-        <div class="segmented-control" id="ctrl-writing-mode">
-          <button type="button" data-value="horizontal" class="is-active">横書き</button>
-          <button type="button" data-value="vertical">縦書き</button>
-        </div>
-      </div>
-
-      <div class="control-group">
-        <div class="control-label"><span>書体</span></div>
-        <div class="segmented-control" id="ctrl-font">
-          <button type="button" data-value="serif" class="is-active">明朝体</button>
-          <button type="button" data-value="sans">ゴシック体</button>
+        <div class="icon-control-row">
+          <div class="icon-control-group">
+            <div class="control-label"><span>書字方向</span></div>
+            <div class="segmented-control" id="ctrl-writing-mode" role="group" aria-label="書字方向">
+              <button type="button" data-value="horizontal" class="is-active" aria-label="横書き" title="横書き" aria-pressed="true">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" /></svg>
+              </button>
+              <button type="button" data-value="vertical" aria-label="縦書き" title="縦書き" aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5v14M12 5v14M17 5v14" /></svg>
+              </button>
+            </div>
+          </div>
+          <span class="icon-control-divider" role="separator" aria-orientation="vertical"></span>
+          <div class="icon-control-group icon-control-font-group">
+            <div class="control-label"><span>書体</span></div>
+            <div class="segmented-control font-control" id="ctrl-font" role="group" aria-label="書体">
+              <button type="button" data-value="serif" class="is-active" aria-label="明朝体" title="明朝体" aria-pressed="true">明</button>
+              <button type="button" data-value="sans" aria-label="ゴシック体" title="ゴシック体" aria-pressed="false">ゴ</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1318,7 +1403,12 @@ SOFTWARE.
   const errorNotice = document.getElementById('error-notice');
   const errorNoticeMessage = document.getElementById('error-notice-message');
   const btnCloseErrorNotice = document.getElementById('btn-close-error-notice');
+  const errorNoticeTimerDependencies = {
+    setTimeout: (callback, delay) => window.setTimeout(callback, delay),
+    clearTimeout: timer => window.clearTimeout(timer)
+  };
   let errorNoticeTimer = null;
+  let errorNoticeTimerCancel = errorNoticeTimerDependencies.clearTimeout;
   const failedLocalStorageWrites = new Set();
 
   function reportLocalStorageWrite(key, error) {
@@ -1336,20 +1426,23 @@ SOFTWARE.
     }
   }
 
-  function showErrorNotice(message) {
+  function showErrorNotice(message, timerDependencies = errorNoticeTimerDependencies) {
     errorNoticeMessage.textContent = message;
     errorNotice.hidden = false;
-    if (errorNoticeTimer) clearTimeout(errorNoticeTimer);
-    errorNoticeTimer = setTimeout(() => {
+    if (errorNoticeTimer !== null) errorNoticeTimerCancel(errorNoticeTimer);
+    errorNoticeTimerCancel = timerDependencies.clearTimeout;
+    errorNoticeTimer = timerDependencies.setTimeout(() => {
       errorNotice.hidden = true;
       errorNoticeTimer = null;
+      errorNoticeTimerCancel = errorNoticeTimerDependencies.clearTimeout;
     }, 5000);
   }
 
   function hideErrorNotice() {
     errorNotice.hidden = true;
-    if (errorNoticeTimer) clearTimeout(errorNoticeTimer);
+    if (errorNoticeTimer !== null) errorNoticeTimerCancel(errorNoticeTimer);
     errorNoticeTimer = null;
+    errorNoticeTimerCancel = errorNoticeTimerDependencies.clearTimeout;
   }
 
   btnCloseErrorNotice.addEventListener('click', hideErrorNotice);
@@ -2003,7 +2096,9 @@ SOFTWARE.
 
   function syncSegmented(container, activeValue) {
     container.querySelectorAll('button').forEach(btn => {
-      btn.classList.toggle('is-active', btn.dataset.value === activeValue);
+      const isActive = btn.dataset.value === activeValue;
+      btn.classList.toggle('is-active', isActive);
+      btn.setAttribute('aria-pressed', String(isActive));
     });
   }
 
@@ -2778,8 +2873,11 @@ SOFTWARE.
       downloadData.type = 'application/json';
       downloadData.id = 'viewer-download-data';
       clonedDoc.querySelector('#viewer-download-data')?.remove();
-      const textBase64 = importedTextFileBlob ? arrayBufferToBase64(await importedTextFileBlob.arrayBuffer()) : '';
-      downloadData.textContent = JSON.stringify(createEmbeddedDownloadData(textBase64, importedTextFileExtension, importedTextFileBlob ? importedTextFileBlob.type : '', exportMediaDataUrl, exportMediaType, backgroundMediaFileExtension));
+      const savedText = importedTextFileBlob ? null : await loadImportedText();
+      const exportTextBlob = importedTextFileBlob || (savedText && savedText.blob instanceof Blob ? savedText.blob : null);
+      const exportTextExtension = importedTextFileBlob ? importedTextFileExtension : savedText?.fileExtension || '';
+      const textBase64 = exportTextBlob ? arrayBufferToBase64(await exportTextBlob.arrayBuffer()) : '';
+      downloadData.textContent = JSON.stringify(createEmbeddedDownloadData(textBase64, exportTextExtension, exportTextBlob ? exportTextBlob.type : '', exportMediaDataUrl, exportMediaType, backgroundMediaFileExtension));
       clonedHead.appendChild(downloadData);
 
       clonedDoc.setAttribute('data-theme', activeViewerSettings.theme);
