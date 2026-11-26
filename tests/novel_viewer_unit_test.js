@@ -47,7 +47,10 @@ test('設定', '書字方向と書体の選択状態をアクセシブルな押�
   assert.match(html, /\.segmented-control\.font-control button\[data-value="sans"\]\s*\{\s*font-family:[^}]*sans-serif;/);
   assert.match(html, /class="icon-control-row"[\s\S]*id="ctrl-writing-mode"[\s\S]*class="icon-control-divider"[^>]*role="separator"[\s\S]*id="ctrl-font"/);
   assert.match(html, /\.icon-control-row\s*\{[^}]*display:\s*flex/);
-  assert.match(html, /\.icon-control-row\s+\.segmented-control button\s*\{[^}]*width:\s*40px[^}]*height:\s*40px/);
+  assert.match(html, /\.icon-control-group\s+\.segmented-control\s*\{[^}]*width:\s*100%[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(html, /\.icon-control-row\s+\.segmented-control button\s*\{[^}]*width:\s*100%[^}]*height:\s*40px/);
+  assert.match(html, /\.icon-control-font-group\s*\{[^}]*align-items:\s*flex-start/);
+  assert.match(html, /\.icon-control-divider\s*\{[^}]*height:\s*40px/);
 });
 
 test('ブラウザー操作基盤', 'CDP応答が止まった場合に期限で失敗し、切断時は保留要求をすぐ解除する', async () => {

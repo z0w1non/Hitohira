@@ -1082,15 +1082,26 @@ async function main() {
       const boxes = buttons.map(button => button.getBoundingClientRect());
       const divider = document.querySelector('.icon-control-divider').getBoundingClientRect();
       const row = document.querySelector('.icon-control-row').getBoundingClientRect();
+      const writingGroup = document.querySelector('.icon-control-group:first-child').getBoundingClientRect();
       const fontGroup = document.querySelector('.icon-control-font-group').getBoundingClientRect();
+      const writingLabel = document.querySelector('.icon-control-group:first-child .control-label').getBoundingClientRect();
+      const fontLabel = document.querySelector('.icon-control-font-group .control-label').getBoundingClientRect();
+      const writingButtons = [...document.querySelectorAll('#ctrl-writing-mode button')].map(button => button.getBoundingClientRect());
+      const fontButtons = [...document.querySelectorAll('#ctrl-font button')].map(button => button.getBoundingClientRect());
       return {
-        square: boxes.every(box => Math.abs(box.width - box.height) <= 1),
+        fixedHeight: boxes.every(box => Math.abs(box.height - 40) <= 1),
+        stretchedWidth: boxes.every(box => box.width > box.height),
+        equalWidths: [...writingButtons, ...fontButtons].every((box, index, all) => index % 2 === 0 || Math.abs(box.width - all[index - 1].width) <= 1),
         sameRow: Math.max(...boxes.map(box => box.top)) - Math.min(...boxes.map(box => box.top)) <= 1,
         dividerBetweenGroups: divider.left > boxes[1].right && divider.right < boxes[2].left,
         dividerCentered: Math.abs((divider.left + divider.right) / 2 - (row.left + row.right) / 2) <= 1,
-        fontRightAligned: Math.abs(fontGroup.right - row.right) <= 1
+        dividerAlignedWithButtons: Math.abs(divider.top - boxes[0].top) <= 1 && Math.abs(divider.bottom - boxes[0].bottom) <= 1,
+        fontLabelNextToDivider: Math.abs(fontLabel.left - (divider.right + 10)) <= 1,
+        labelsAboveButtons: writingLabel.bottom <= writingButtons[0].top && fontLabel.bottom <= fontButtons[0].top,
+        writingGroupStartsAtRow: Math.abs(writingGroup.left - row.left) <= 1,
+        fontGroupEndsAtRow: Math.abs(fontGroup.right - row.right) <= 1
       };
-    })()`), { square: true, sameRow: true, dividerBetweenGroups: true, dividerCentered: true, fontRightAligned: true }, '書字方向・書体アイコンの正方形、同一行、縦棒の中央配置、書体の右寄せが不正です');
+    })()`), { fixedHeight: true, stretchedWidth: true, equalWidths: true, sameRow: true, dividerBetweenGroups: true, dividerCentered: true, dividerAlignedWithButtons: true, fontLabelNextToDivider: true, labelsAboveButtons: true, writingGroupStartsAtRow: true, fontGroupEndsAtRow: true }, '書字方向・書体の高さ・伸長幅・同一行配置・縦棒・ラベル配置が仕様と一致しません');
     record('設定', 'フォント切替');
     assert.equal(await evaluate('document.getElementById("ctrl-show-progress").checked'), true, '進捗表示切替を操作できません');
     record('設定', '進捗表示切替');
