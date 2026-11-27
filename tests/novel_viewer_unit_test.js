@@ -284,7 +284,7 @@ test('設定・保存データ', '保存状態を意味の分かるアイコン�
   assert.match(html, /--save-status-success:\s*#75d69c/);
   assert.match(html, /--save-status-error:\s*#ff7b72/);
   assert.match(html, /--save-status-warning:\s*#f2cc60/);
-  assert.match(html, /\.save-status-icon\s*\{[^}]*width:\s*24px[^}]*height:\s*24px[^}]*stroke-width:\s*2\.4/);
+  assert.match(html, /\.save-status-icon\s*\{[^}]*width:\s*18px[^}]*height:\s*18px[^}]*stroke-width:\s*1\.75/);
   const status = { dataset: {}, innerHTML: '' };
   const { setSettingsSaveStatus } = load(['setSettingsSaveStatus'], {
     settingsSaveStatusEl: status,
@@ -427,6 +427,9 @@ test('本文検索', '検索ボタン・検索語・結果一覧と対象フィ�
   assert.match(html, /id="search-drawer"[^>]*aria-label="検索"/);
   const searchDrawer = html.slice(html.indexOf('<aside id="search-drawer"'), html.indexOf('</aside>', html.indexOf('<aside id="search-drawer"')));
   assert.match(searchDrawer, /<span class="drawer-title" data-i18n="search\.title">検索<\/span>/);
+  assert.match(searchDrawer, /class="search-drawer-body"[\s\S]*class="search-controls search-drawer-controls"[\s\S]*class="search-results-scroll"[\s\S]*<ol id="search-results"/);
+  assert.match(html, /\.search-drawer-body\s*\{[^}]*min-height:\s*0[^}]*overflow:\s*hidden/);
+  assert.match(html, /\.search-results-scroll\s*\{[^}]*min-height:\s*0[^}]*overflow-y:\s*auto/);
   assert.match(searchDrawer, /id="search-query"[^>]*type="search"[^>]*aria-label="本文を検索"/);
   assert.doesNotMatch(searchDrawer, /検索語|検索語を入力/);
   assert.match(html, /id="search-include-headings"[^>]*type="checkbox" checked/);
@@ -434,6 +437,9 @@ test('本文検索', '検索ボタン・検索語・結果一覧と対象フィ�
   assert.match(searchDrawer, /class="search-variant-toggle" title="英字大小・全半角を区別"[\s\S]*id="search-distinguish-variants"[^>]*aria-label="英字大小・全半角を区別"[\s\S]*<svg[^>]*aria-hidden="true"><text[^>]*>Aa<\/text><text[^>]*>ＡＡ<\/text>/);
   assert.match(html, /#search-drawer input\[type="checkbox"\]\s*\{[^}]*accent-color:\s*var\(--text-secondary\)/);
   assert.match(html, /#search-query\s*\{[^}]*min-height:\s*34px[^}]*font-size:\s*14px[^}]*\}/);
+  assert.match(html, /#search-query::-[\w-]+-search-cancel-button\s*\{[^}]*filter:\s*grayscale\(1\)/);
+  assert.match(html, /input:not\(\[type="checkbox"\]\):not\(\[type="range"\]\):not\(\[type="color"\]\):not\(\[type="file"\]\):focus-visible,[\s\n]*textarea:focus-visible,[\s\n]*select:focus-visible\s*\{[^}]*outline:\s*1px solid var\(--text-secondary\)/);
+  assert.match(html, /#novel-content \.search-current-block\s*\{[^}]*outline:\s*1px solid var\(--text-secondary\)[^}]*outline-offset:\s*2px/);
   assert.match(html, /\.search-variant-toggle\s*\{[^}]*width:\s*36px[^}]*height:\s*28px/);
   assert.match(html, /<ol id="search-results"[^>]*aria-label="検索結果一覧"/);
   assert.match(html, /id="btn-search-previous"[^>]*aria-label="前の検索結果へ"[^>]*>[\s\S]*?<svg[^>]*aria-hidden="true"/);
@@ -444,6 +450,7 @@ test('本文検索', '検索ボタン・検索語・結果一覧と対象フィ�
   assert.match(html, /\.search-filter-navigation\s*\{[^}]*display:\s*flex/);
   assert.match(searchDrawer, /class="search-filter-navigation"[\s\S]*class="search-filter-group"[\s\S]*id="search-result-status"[\s\S]*class="search-result-navigation"[^>]*aria-label="検索結果の移動"[\s\S]*id="btn-search-previous"[\s\S]*id="btn-search-next"/);
   assert.match(html, /\.search-result-navigation\s*\{[^}]*width:\s*56px[^}]*height:\s*56px/);
+  assert.match(html, /\.search-result-navigation\s*\{[^}]*gap:\s*4px/);
   assert.match(html, /\.search-result-navigation\s*\{[^}]*grid-template-areas:\s*"previous"\s*"next"/);
   assert.match(html, /html\[data-writing-mode="vertical"\] \.search-result-navigation\s*\{[^}]*grid-template-areas:\s*"next previous"/);
   assert.match(html, /html\[data-writing-mode="vertical"\] #btn-search-previous svg,[\s\n]*html\[data-writing-mode="vertical"\] #btn-search-next svg\s*\{[^}]*transform:\s*rotate\(90deg\)/);
@@ -726,10 +733,12 @@ test('画面構成・ドロワー', '設定・目次・検索を切り替える�
   const btnOpenToc = makeTrigger();
   const btnOpenSearch = makeTrigger();
   let scrolled = 0;
+  let searchHighlightPresent = false;
+  const activeSearchElement = { classList: { remove: name => { if (name === 'search-current-block') searchHighlightPresent = false; } } };
   const currentButton = { scrollIntoView: () => { scrolled++; } };
   const { openSettingsDrawer, openTocDrawer, openSearchDrawer, closeAllDrawers } = load(
-    ['openSettingsDrawer', 'openTocDrawer', 'openSearchDrawer', 'closeAllDrawers'], {
-      settingsDrawer, tocDrawer, searchDrawer, btnOpenSettings, btnOpenToc, btnOpenSearch, renderSearchResults() {},
+    ['openSettingsDrawer', 'openTocDrawer', 'openSearchDrawer', 'closeAllDrawers', 'clearActiveSearchBlock'], {
+      settingsDrawer, tocDrawer, searchDrawer, btnOpenSettings, btnOpenToc, btnOpenSearch, activeSearchElement, renderSearchResults() {},
       searchQueryInput: { focus() {}, value: '', setSelectionRange() {} },
       tocListEl: { querySelector: () => currentButton }
     });
@@ -754,7 +763,9 @@ test('画面構成・ドロワー', '設定・目次・検索を切り替える�
   assert.equal(tocDrawer.classList.contains('is-open'), false);
   assert.equal(searchDrawer.classList.contains('is-open'), true);
   assert.equal(btnOpenSearch.attributes['aria-expanded'], 'true');
+  searchHighlightPresent = true;
   closeAllDrawers();
+  assert.equal(searchHighlightPresent, false);
   assert.equal(settingsDrawer.classList.contains('is-open'), false);
   assert.equal(tocDrawer.classList.contains('is-open'), false);
   assert.equal(searchDrawer.classList.contains('is-open'), false);
