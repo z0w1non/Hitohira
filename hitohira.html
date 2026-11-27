@@ -379,13 +379,66 @@ SOFTWARE.
     transform: translateX(100%);
     visibility: hidden;
     box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
-    transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), visibility 0.24s, background-color 0.2s ease, color 0.2s ease;
+    transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 0.24s, background-color 0.2s ease, color 0.2s ease;
   }
 
   .drawer-panel.is-open {
     transform: translateX(0);
     visibility: visible;
+    transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s, background-color 0.2s ease, color 0.2s ease;
   }
+
+  .search-controls { display: grid; gap: 12px; }
+  .search-query-label { font-size: 12px; color: var(--text-secondary); }
+  #search-query {
+    width: 100%;
+    min-height: 38px;
+    padding: 8px 10px;
+    color: var(--text-primary);
+    background: var(--bg-main);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font: inherit;
+  }
+  .search-filter-row { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 12px; }
+  .search-filter-row label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .search-variant-toggle { position: relative; display: grid !important; place-items: center; width: 42px; height: 32px; margin-inline-start: 2px; border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-secondary); background: var(--bg-hover); cursor: pointer; }
+  .search-variant-toggle:has(input:checked) { color: var(--segment-active-text); background: var(--segment-active-bg); }
+  .search-variant-toggle:has(input:focus-visible) { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+  .search-variant-toggle input { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  .search-variant-toggle svg { display: block; width: 34px; height: 22px; fill: currentColor; }
+  .search-variant-toggle svg text { font-family: sans-serif; font-size: 10px; font-weight: 600; }
+  .search-filter-navigation { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .search-filter-group { display: grid; min-width: 0; gap: 8px; }
+  .search-result-navigation { display: grid; flex: 0 0 76px; width: 76px; height: 76px; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); grid-template-areas: "previous" "next"; gap: 0; }
+  #btn-search-previous { grid-area: previous; }
+  #btn-search-next { grid-area: next; }
+  .search-result-navigation .action-btn { display: grid; place-items: center; justify-content: center; width: 100%; min-width: 0; height: 100%; padding: 8px; text-align: center; }
+  .search-result-navigation .action-btn svg { display: block; justify-self: center; align-self: center; margin: auto; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  html[data-writing-mode="vertical"] .search-result-navigation { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); grid-template-areas: "next previous"; }
+  html[data-writing-mode="vertical"] #btn-search-previous svg,
+  html[data-writing-mode="vertical"] #btn-search-next svg { transform: rotate(90deg); }
+  #search-result-status { text-align: left; font-size: 12px; color: var(--text-secondary); }
+  #search-results { display: grid; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+  .search-result-button {
+    display: grid;
+    width: 100%;
+    gap: 5px;
+    padding: 9px 10px;
+    color: var(--text-primary);
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .search-result-button:hover,
+  .search-result-button.is-current { background: var(--segment-active-bg); color: var(--segment-active-text); }
+  .search-result-heading { font-size: 11px; font-weight: 600; color: var(--text-secondary); }
+  .search-result-snippet { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+  .search-result-snippet mark { color: inherit; background: color-mix(in srgb, var(--text-secondary) 28%, transparent); font-weight: 700; }
+  .search-empty { padding: 12px 4px; color: var(--text-secondary); font-size: 12px; text-align: center; }
+  #novel-content .search-current-block { background-color: color-mix(in srgb, var(--segment-active-bg) 55%, transparent); outline: 2px solid var(--text-secondary); outline-offset: 3px; border-radius: 3px; }
 
   .drawer-header {
     display: flex;
@@ -402,6 +455,9 @@ SOFTWARE.
     letter-spacing: 0.06em;
     color: var(--text-primary);
   }
+
+  .settings-save-status { margin-inline-start: auto; padding-inline: 8px; color: var(--text-secondary); font-size: 11px; }
+  .settings-save-status[data-state="failed"], .settings-save-status[data-state="conflict"] { color: var(--accent-status); }
 
   .drawer-header-actions {
     display: flex;
@@ -712,6 +768,21 @@ SOFTWARE.
     gap: 2px;
   }
 
+  .bookmark-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  #bookmark-name { flex: 1 1 auto; width: 0; min-width: 0; padding: 9px 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary); }
+  .bookmark-add { display: grid; place-items: center; flex: 0 0 38px; width: 38px; height: 38px; padding: 8px; }
+  .bookmark-add svg, .bookmark-heading-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .bookmark-list-label { display: flex; justify-content: flex-start; margin-bottom: 6px; }
+  #bookmark-list { list-style: none; display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; }
+  .bookmark-item { display: flex; align-items: stretch; gap: 4px; }
+  .bookmark-jump { flex: 1 1 auto; min-width: 0; padding: 8px; overflow-wrap: anywhere; text-align: left; border: 0; border-radius: 6px; background: transparent; color: var(--text-primary); cursor: pointer; }
+  .bookmark-jump:hover { background: var(--bg-hover); }
+  .bookmark-delete { display: grid; place-items: center; flex: 0 0 36px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer; }
+  .bookmark-delete:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .bookmark-delete svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .bookmark-empty { padding: 8px; color: var(--text-secondary); font-size: 13px; }
+
   .toc-item {
     display: flex;
     align-items: center;
@@ -843,7 +914,7 @@ SOFTWARE.
 <body>
   <div id="error-notice" role="alert" aria-live="assertive" hidden>
     <span id="error-notice-message"></span>
-    <button id="btn-close-error-notice" type="button" aria-label="閉じる" title="閉じる">
+    <button id="btn-close-error-notice" type="button" aria-label="閉じる" title="閉じる" data-i18n-aria="common.close" data-i18n-title="common.close">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18" /></svg>
     </button>
   </div>
@@ -855,7 +926,7 @@ SOFTWARE.
     </div>
   </div>
 
-  <button id="btn-open-settings" class="icon-btn" type="button" aria-label="設定を開く" title="設定">
+  <button id="btn-open-settings" class="icon-btn" type="button" aria-label="設定を開く" title="設定" aria-controls="settings-drawer" aria-expanded="false" data-i18n-aria="settings.open" data-i18n-title="settings.title">
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <circle cx="12" cy="11.05" r="3.75" />
       <path d="M10 2.75h4l.55 2.1a7.6 7.6 0 0 1 1.65.95l2.05-.7 2 3.46-1.5 1.55a7.8 7.8 0 0 1 0 1.9l1.5 1.55-2 3.46-2.05-.7a7.6 7.6 0 0 1-1.65.95L14 19.35h-4l-.55-2.08a7.6 7.6 0 0 1-1.65-.95l-2.05.7-2-3.46 1.5-1.56a7.8 7.8 0 0 1 0-1.9l-1.5-1.54 2-3.46 2.05.7a7.6 7.6 0 0 1 1.65-.95L10 2.75Z" />
@@ -864,37 +935,38 @@ SOFTWARE.
 
   <main id="viewer-container" tabindex="0">
     <article id="novel-content">
-      <h1>Hitohira</h1>
-      <p>外部サーバーや外部ライブラリに依存せず、1つのHTMLファイルで小説を読むためのビューアです。</p>
-      <h2>本文を読む</h2>
-      <p>TXT・Markdown・HTMLの本文を、設定メニューのファイル選択または画面へのドラッグ＆ドロップで読み込めます。本文は安全なHTMLへ変換して表示します。</p>
-      <p>Markdownでは見出し、表、リスト、引用、コードブロックなどに対応しています。ルビは「漢字《かんじ》」、対象語を指定する場合は「｜今日《こんにち》」の形式で記述できます。</p>
-      <h2>表示と背景を整える</h2>
-      <p>縦書き・横書き、明朝体・ゴシック体、文字サイズ、行間、字間、ルビ、本文幅、余白、配色、ライト・ダークテーマを調整できます。</p>
-      <p>PNG・APNG・JPEG・WebP・GIF・BMP・SVGの画像や、ブラウザーが再生できる動画を背景に設定できます。背景メディアはドラッグまたはタッチで移動でき、ダブルクリックで位置を戻せます。</p>
-      <h2>目次とキーボード操作</h2>
-      <p>本文の見出しから目次を作成できます。読書位置、設定、読み込んだ本文と元ファイルは保存領域へ自動保存されます。</p>
-      <p>本文上のクリックでページ送り、横書きでは矢印キー、縦書きでは左右キーで移動します。PageDown・PageUp・Space・Shift+Space、Home・Endも使えます。F1で操作一覧、Sで設定、Oで目次を表示します。</p>
-      <h2>保存とエクスポート</h2>
-      <p>HTMLエクスポートでは、本文・設定・背景メディア・必要な元ファイル情報を1つのHTMLに埋め込みます。外部ファイルや実行時の一時URLを必要とせず、単独で開けます。</p>
-      <p>読み込んだテキスト・画像・動画の元ファイルは、個別に元のバイト列のままエクスポートできます。個人情報や機密情報を含む本文・メディアを扱う場合は、共有やエクスポートの前に内容を確認してください。</p>
+      <h1 data-i18n="intro.title">Hitohira</h1>
+      <p data-i18n="intro.summary">外部サーバーや外部ライブラリに依存せず、1つのHTMLファイルで小説を読むためのビューアです。</p>
+      <h2 data-i18n="intro.readTitle">本文を読む</h2>
+      <p data-i18n="intro.readFiles">TXT・Markdown・HTMLの本文を、設定メニューのファイル選択または画面へのドラッグ＆ドロップで読み込めます。本文は安全なHTMLへ変換して表示します。</p>
+      <p data-i18n="intro.markdown">Markdownでは見出し、表、リスト、引用、コードブロックなどに対応しています。ルビは「漢字《かんじ》」、対象語を指定する場合は「｜今日《こんにち》」の形式で記述できます。</p>
+      <h2 data-i18n="intro.displayTitle">表示と背景を整える</h2>
+      <p data-i18n="intro.display">縦書き・横書き、明朝体・ゴシック体、文字サイズ、行間、字間、ルビ、本文幅、余白、配色、ライト・ダークテーマを調整できます。</p>
+      <p data-i18n="intro.background">PNG・APNG・JPEG・WebP・GIF・BMP・SVGの画像や、ブラウザーが再生できる動画を背景に設定できます。背景メディアはドラッグまたはタッチで移動でき、ダブルクリックで位置を戻せます。</p>
+      <h2 data-i18n="intro.navigationTitle">目次・検索とキーボード操作</h2>
+      <p data-i18n="intro.navigation">本文の見出しから目次を作成できます。検索ボタンまたはCtrl+Fで見出し・本文を検索し、一致箇所を一覧から選んで移動できます。検索結果一覧を開いたまま本文を読み進められます。</p>
+      <p data-i18n="intro.shortcuts">読書位置、設定、読み込んだ本文と元ファイルは保存領域へ自動保存されます。本文上のクリックでページ送り、横書きでは矢印キー、縦書きでは左右キーで移動します。PageDown・PageUp・Space・Shift+Space、Home・Endも使えます。F1で操作一覧、Sで設定、Oで目次を表示します。</p>
+      <h2 data-i18n="intro.exportTitle">保存とエクスポート</h2>
+      <p data-i18n="intro.export">HTMLエクスポートでは、本文・設定・背景メディア・必要な元ファイル情報を1つのHTMLに埋め込みます。外部ファイルや実行時の一時URLを必要とせず、単独で開けます。</p>
+      <p data-i18n="intro.privacy">読み込んだテキスト・画像・動画の元ファイルは、個別に元のバイト列のままエクスポートできます。個人情報や機密情報を含む本文・メディアを扱う場合は、共有やエクスポートの前に内容を確認してください。</p>
     </article>
   </main>
 
   <div id="progress-indicator" class="is-hidden" aria-live="polite">0%</div>
 
-  <aside id="settings-drawer" class="drawer-panel" aria-label="設定">
+  <aside id="settings-drawer" class="drawer-panel" aria-label="設定" aria-hidden="true" tabindex="-1" inert data-i18n-aria="settings.title">
     <div class="drawer-header">
-      <span class="drawer-title">設定</span>
+      <span class="drawer-title" data-i18n="settings.title">設定</span>
+      <span id="settings-save-status" class="settings-save-status" role="status" aria-live="polite"></span>
       <div class="drawer-header-actions">
         
-        <button id="btn-theme-toggle" class="icon-btn" type="button" aria-label="テーマを切り替え" title="テーマを切り替え">
+        <button id="btn-theme-toggle" class="icon-btn" type="button" aria-label="テーマを切り替え" title="テーマを切り替え" data-i18n-aria="settings.theme">
           <svg viewBox="0 0 24 24" aria-hidden="true" id="theme-toggle-icon"><path d="M20.2 15.4A8.5 8.5 0 0 1 8.6 3.8 8.8 8.8 0 1 0 20.2 15.4Z" /></svg>
         </button>
-        <button id="btn-open-help" class="icon-btn" type="button" aria-label="キーボードショートカットを表示" title="ヘルプ">
+        <button id="btn-open-help" class="icon-btn" type="button" aria-label="キーボードショートカットを表示" title="ヘルプ" data-i18n-aria="settings.help" data-i18n-title="settings.helpTitle">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M9.7 9a2.35 2.35 0 1 1 3.8 1.85c-.95.75-1.5 1.2-1.5 2.4M12 16.8v.1" /></svg>
         </button>
-        <button id="btn-open-toc" class="icon-btn" type="button" aria-label="目次を開く" title="目次">
+        <button id="btn-open-toc" class="icon-btn" type="button" aria-label="目次を開く" title="目次" aria-controls="toc-drawer" aria-expanded="false" data-i18n-aria="settings.tocOpen" data-i18n-title="toc.title">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="4" cy="6" r="1.25" fill="currentColor" stroke="none" />
             <circle cx="4" cy="12" r="1.25" fill="currentColor" stroke="none" />
@@ -902,7 +974,10 @@ SOFTWARE.
             <path d="M9 6h11M9 12h11M9 18h11" />
           </svg>
         </button>
-        <button id="btn-close-settings" class="icon-btn" type="button" aria-label="設定を閉じる" title="閉じる">
+        <button id="btn-open-search" class="icon-btn" type="button" aria-label="本文を検索" title="検索 (Ctrl+F)" aria-controls="search-drawer" aria-expanded="false" data-i18n-aria="settings.search" data-i18n-title="settings.searchTitle">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="10.8" cy="10.8" r="6.2" /><path d="m15.4 15.4 4.3 4.3" /></svg>
+        </button>
+        <button id="btn-close-settings" class="icon-btn" type="button" aria-label="設定を閉じる" title="閉じる" data-i18n-aria="settings.close" data-i18n-title="common.close">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M6 6 18 18M18 6 6 18" />
           </svg>
@@ -914,22 +989,22 @@ SOFTWARE.
       <div class="control-group">
         <div class="icon-control-row">
           <div class="icon-control-group">
-            <div class="control-label"><span>書字方向</span></div>
-            <div class="segmented-control" id="ctrl-writing-mode" role="group" aria-label="書字方向">
-              <button type="button" data-value="horizontal" class="is-active" aria-label="横書き" title="横書き" aria-pressed="true">
+            <div class="control-label"><span data-i18n="settings.writingMode">書字方向</span></div>
+            <div class="segmented-control" id="ctrl-writing-mode" role="group" aria-label="書字方向" data-i18n-aria="settings.writingMode">
+              <button type="button" data-value="horizontal" class="is-active" aria-label="横書き" title="横書き" data-i18n-aria="settings.horizontal" data-i18n-title="settings.horizontal" aria-pressed="true">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" /></svg>
               </button>
-              <button type="button" data-value="vertical" aria-label="縦書き" title="縦書き" aria-pressed="false">
+              <button type="button" data-value="vertical" aria-label="縦書き" title="縦書き" data-i18n-aria="settings.vertical" data-i18n-title="settings.vertical" aria-pressed="false">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5v14M12 5v14M17 5v14" /></svg>
               </button>
             </div>
           </div>
           <span class="icon-control-divider" role="separator" aria-orientation="vertical"></span>
           <div class="icon-control-group icon-control-font-group">
-            <div class="control-label"><span>書体</span></div>
-            <div class="segmented-control font-control" id="ctrl-font" role="group" aria-label="書体">
-              <button type="button" data-value="serif" class="is-active" aria-label="明朝体" title="明朝体" aria-pressed="true">明</button>
-              <button type="button" data-value="sans" aria-label="ゴシック体" title="ゴシック体" aria-pressed="false">ゴ</button>
+            <div class="control-label"><span data-i18n="settings.font">書体</span></div>
+            <div class="segmented-control font-control" id="ctrl-font" role="group" aria-label="書体" data-i18n-aria="settings.font">
+              <button type="button" data-value="serif" class="is-active" aria-label="明朝体" title="明朝体" data-i18n-aria="settings.serif" data-i18n-title="settings.serif" aria-pressed="true">明</button>
+              <button type="button" data-value="sans" aria-label="ゴシック体" title="ゴシック体" data-i18n-aria="settings.sans" data-i18n-title="settings.sans" aria-pressed="false">ゴ</button>
             </div>
           </div>
         </div>
@@ -937,7 +1012,7 @@ SOFTWARE.
 
       <div class="control-group">
         <div class="control-label">
-          <span>文字サイズ</span>
+          <span data-i18n="settings.fontSize">文字サイズ</span>
           <span class="control-value" id="val-font-size">16px</span>
         </div>
         <input type="range" id="ctrl-font-size" min="10" max="22" step="1" value="16">
@@ -945,7 +1020,7 @@ SOFTWARE.
 
       <div class="control-group">
         <div class="control-label">
-          <span>行間隔</span>
+          <span data-i18n="settings.lineHeight">行間隔</span>
           <span class="control-value" id="val-line-height">2.0</span>
         </div>
         <input type="range" id="ctrl-line-height" min="1.0" max="3.0" step="0.1" value="2.0">
@@ -953,45 +1028,45 @@ SOFTWARE.
 
       <div class="control-group">
         <div class="control-label">
-          <span>文字間隔</span>
+          <span data-i18n="settings.letterSpacing">文字間隔</span>
           <span class="control-value" id="val-letter-spacing">0.04em</span>
         </div>
         <input type="range" id="ctrl-letter-spacing" min="0" max="0.08" step="0.01" value="0.04">
       </div>
-      <div class="control-group"><div class="control-label"><span>本文幅</span><span class="control-value" id="val-content-width">720px</span></div><input type="range" id="ctrl-content-width" min="480" max="960" step="20" value="720"></div>
-      <div class="control-group"><div class="control-label"><span>本文余白</span><span class="control-value" id="val-content-padding">48px</span></div><input type="range" id="ctrl-content-padding" min="16" max="80" step="4" value="48"></div>
-      <div class="control-group"><div class="control-label"><span>背景ぼかし</span><span class="control-value" id="val-background-blur">12px</span></div><input type="range" id="ctrl-background-blur" min="0" max="24" step="2" value="12"></div>
+      <div class="control-group"><div class="control-label"><span data-i18n="settings.contentWidth">本文幅</span><span class="control-value" id="val-content-width">720px</span></div><input type="range" id="ctrl-content-width" min="480" max="960" step="20" value="720"></div>
+      <div class="control-group"><div class="control-label"><span data-i18n="settings.contentPadding">本文余白</span><span class="control-value" id="val-content-padding">48px</span></div><input type="range" id="ctrl-content-padding" min="16" max="80" step="4" value="48"></div>
+      <div class="control-group"><div class="control-label"><span data-i18n="settings.blur">背景ぼかし</span><span class="control-value" id="val-background-blur">12px</span></div><input type="range" id="ctrl-background-blur" min="0" max="24" step="2" value="12"></div>
 
       <div class="control-group">
         <div class="control-label">
-          <span>ルビサイズ</span>
+          <span data-i18n="settings.ruby">ルビサイズ</span>
           <span class="control-value" id="val-ruby-scale">50%</span>
         </div>
         <input type="range" id="ctrl-ruby-scale" min="0.30" max="0.70" step="0.05" value="0.50">
       </div>
 
       <div class="color-row">
-        <label for="ctrl-bg-color">背景色</label>
+        <label for="ctrl-bg-color" data-i18n="settings.bgColor">背景色</label>
         <input type="color" id="ctrl-bg-color" value="#f7f7f7">
       </div>
 
       <div class="color-row">
-        <label for="ctrl-narration-color">文章の文字色</label>
+        <label for="ctrl-narration-color" data-i18n="settings.narrationColor">文章の文字色</label>
         <input type="color" id="ctrl-narration-color" value="#1c1c1c">
       </div>
 
       <div class="color-row">
-        <label for="ctrl-dialogue-color">台詞の文字色</label>
+        <label for="ctrl-dialogue-color" data-i18n="settings.dialogueColor">台詞の文字色</label>
         <input type="color" id="ctrl-dialogue-color" value="#595959">
       </div>
 
       <div class="color-row">
-        <label for="ctrl-panel-color">本文パネル色</label>
+        <label for="ctrl-panel-color" data-i18n="settings.panelColor">本文パネル色</label>
         <input type="color" id="ctrl-panel-color" value="#ffffff">
       </div>
 
       <label class="toggle-row" for="ctrl-auto-sync">
-        <span>色を自動選択</span>
+        <span data-i18n="settings.autoColor">色を自動選択</span>
         <span class="switch">
           <input type="checkbox" id="ctrl-auto-sync">
           <span class="slider"></span>
@@ -1000,83 +1075,151 @@ SOFTWARE.
 
       <div class="control-group">
         <div class="control-label">
-          <span>テキスト背景の不透明度</span>
+          <span data-i18n="settings.panelOpacity">テキスト背景の不透明度</span>
           <span class="control-value" id="val-panel-bg-alpha">75%</span>
         </div>
         <input type="range" id="ctrl-panel-bg-alpha" min="0.0" max="1.0" step="0.05" value="0.75">
       </div>
 
       <label class="toggle-row" for="ctrl-show-progress">
-        <span>読書進捗率を表示</span>
+        <span data-i18n="settings.progress">読書進捗率を表示</span>
         <span class="switch">
           <input type="checkbox" id="ctrl-show-progress">
           <span class="slider"></span>
         </span>
       </label>
       <label class="toggle-row" for="ctrl-wake-lock">
-        <span>画面スリープを防止 <span id="wake-lock-status" aria-live="polite"></span></span>
+        <span><span data-i18n="settings.wakeLock">画面スリープを防止</span> <span id="wake-lock-status" aria-live="polite"></span></span>
         <span class="switch"><input type="checkbox" id="ctrl-wake-lock"><span class="slider"></span></span>
       </label>
 
       <div class="control-group" id="import-file-group">
-        <div class="control-label"><span>インポート</span></div>
+        <div class="control-label"><span data-i18n="settings.import">インポート</span></div>
         <div class="action-btn-row">
-          <div class="file-action-group"><span class="file-action-label">テキスト / 画像 / 動画</span><button type="button" class="action-btn file-icon-btn" id="btn-import-file" title="ファイルをインポート" aria-label="ファイルをインポート"><svg class="action-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v3h16v-3" /></svg></button></div>
+          <div class="file-action-group"><span class="file-action-label" data-i18n="settings.fileTypes">テキスト / 画像 / 動画</span><button type="button" class="action-btn file-icon-btn" id="btn-import-file" title="ファイルをインポート" aria-label="ファイルをインポート" data-i18n-title="settings.importFile" data-i18n-aria="settings.importFile"><svg class="action-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v3h16v-3" /></svg></button></div>
         </div>
       </div>
       <div class="control-group" id="download-file-group">
-          <div class="control-label"><span>エクスポート</span></div>
-          <div class="action-btn-row" id="loaded-file-downloads" aria-label="読み込みファイルとHTMLのダウンロード">
-            <div class="file-action-group export-html-group"><span class="file-action-label">HTML</span><span class="file-action-size" id="html-export-size" aria-live="polite">計算中</span><button type="button" class="action-btn file-icon-btn" id="btn-export-html" title="HTMLを書き出す" aria-label="HTMLを書き出す"><svg class="action-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m-5 5 5-5 5 5M4 17v3h16v-3" /></svg></button></div>
+          <div class="control-label"><span data-i18n="settings.export">エクスポート</span></div>
+          <div class="action-btn-row" id="loaded-file-downloads" aria-label="読み込みファイルとHTMLのダウンロード" data-i18n-aria="settings.loadedFiles">
+            <div class="file-action-group export-html-group"><span class="file-action-label">HTML</span><span class="file-action-size" id="html-export-size" aria-live="polite" data-i18n="settings.calculating">計算中</span><button type="button" class="action-btn file-icon-btn" id="btn-export-html" title="HTMLを書き出す" aria-label="HTMLを書き出す" data-i18n-title="settings.exportHtml" data-i18n-aria="settings.exportHtml"><svg class="action-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m-5 5 5-5 5 5M4 17v3h16v-3" /></svg></button></div>
           </div>
       </div>
       <input type="file" id="file-input" accept=".txt,.html,.htm,image/png,image/apng,image/jpeg,image/webp,image/gif,image/bmp,image/svg+xml,video/*,.png,.apng,.jpg,.jpeg,.webp,.gif,.bmp,.svg" multiple hidden>
     </div>
 
     <div class="drawer-footer">
-      <button type="button" class="action-btn btn-reset" id="btn-reset-all">設定を初期化</button>
+      <button type="button" class="action-btn btn-reset" id="btn-reset-all" data-i18n="settings.reset">設定を初期化</button>
     </div>
   </aside>
 
   <dialog id="shortcut-modal" aria-labelledby="shortcut-modal-title">
     <div class="shortcut-modal-body">
       <div class="shortcut-modal-header">
-        <span id="shortcut-modal-title" class="shortcut-modal-title">キーボードショートカット</span>
-        <button id="btn-close-help" class="icon-btn" type="button" aria-label="ヘルプを閉じる" title="閉じる">
+        <span id="shortcut-modal-title" class="shortcut-modal-title" data-i18n="help.title">キーボードショートカット</span>
+        <button id="btn-close-help" class="icon-btn" type="button" aria-label="ヘルプを閉じる" title="閉じる" data-i18n-aria="help.close" data-i18n-title="common.close">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18" /></svg>
         </button>
       </div>
       <table class="shortcut-table">
-        <thead><tr><th>キー</th><th>操作</th></tr></thead>
+        <thead><tr><th data-i18n="help.key">キー</th><th data-i18n="help.action">操作</th></tr></thead>
         <tbody>
-          <tr><td>矢印キー</td><td>表示方向に合わせてスクロール</td></tr>
-          <tr><td>Space</td><td>次のページへ移動</td></tr>
-          <tr><td>Shift + Space</td><td>前のページへ移動</td></tr>
-          <tr><td>PageDown / PageUp</td><td>次のページ / 前のページへ移動</td></tr>
-          <tr><td>Home / End</td><td>先頭 / 末尾へ移動</td></tr>
-          <tr><td>F11</td><td>フルスクリーンを切り替え</td></tr>
-          <tr><td>F1</td><td>キーボードショートカットのヘルプを表示</td></tr>
-          <tr><td>S</td><td>設定を開く</td></tr>
-          <tr><td>O</td><td>目次を開く</td></tr>
-          <tr><td>Escape</td><td>設定・目次を閉じる</td></tr>
+          <tr><td>Arrow keys</td><td data-i18n="help.arrows">表示方向に合わせてスクロール</td></tr>
+          <tr><td>Space</td><td data-i18n="help.next">次のページへ移動</td></tr>
+          <tr><td>Shift + Space</td><td data-i18n="help.previous">前のページへ移動</td></tr>
+          <tr><td>PageDown / PageUp</td><td data-i18n="help.pages">次のページ / 前のページへ移動</td></tr>
+          <tr><td>Home / End</td><td data-i18n="help.ends">先頭 / 末尾へ移動</td></tr>
+          <tr><td>F11</td><td data-i18n="help.fullscreen">フルスクリーンを切り替え</td></tr>
+          <tr><td>F1</td><td data-i18n="help.show">キーボードショートカットのヘルプを表示</td></tr>
+          <tr><td>S</td><td data-i18n="help.openSettings">設定を開く</td></tr>
+          <tr><td>O</td><td data-i18n="help.openToc">目次を開く</td></tr>
+          <tr><td>Ctrl+F</td><td data-i18n="help.openSearch">検索を開く</td></tr>
+          <tr><td>F3 / Shift+F3</td><td data-i18n="help.searchNextPrevious">次 / 前の検索結果へ移動</td></tr>
+          <tr><td>Escape</td><td data-i18n="help.escape">設定・目次・検索を閉じる</td></tr>
         </tbody>
       </table>
     </div>
   </dialog>
 
-  <aside id="toc-drawer" class="drawer-panel" aria-label="目次">
+  <aside id="toc-drawer" class="drawer-panel" aria-label="目次" aria-hidden="true" tabindex="-1" inert data-i18n-aria="toc.title">
     <div class="drawer-header">
-      <span class="drawer-title">目次</span>
-      <button id="btn-close-toc" class="icon-btn" type="button" aria-label="目次を閉じる" title="閉じる">
+      <span class="drawer-title" data-i18n="toc.title">目次</span>
+      <button id="btn-close-toc" class="icon-btn" type="button" aria-label="目次を閉じる" title="閉じる" data-i18n-aria="toc.close" data-i18n-title="common.close">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M6 6 18 18M18 6 6 18" />
         </svg>
       </button>
     </div>
     <div class="drawer-body">
+      <div class="bookmark-controls">
+        <label class="visually-hidden" for="bookmark-name" data-i18n="bookmark.name">しおり名</label>
+        <input id="bookmark-name" type="text" maxlength="80" placeholder="現在位置の名前（省略可）" data-i18n-placeholder="bookmark.placeholder">
+        <button id="btn-add-bookmark" class="action-btn bookmark-add" type="button" aria-label="現在位置にしおりを追加" title="現在位置にしおりを追加" data-i18n-aria="bookmark.add" data-i18n-title="bookmark.add">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5A2.5 2.5 0 0 1 8.5 2h7A2.5 2.5 0 0 1 18 4.5V21l-6-4-6 4V4.5Z" /><path d="M12 7v6m-3-3h6" /></svg>
+        </button>
+      </div>
+      <div class="bookmark-list-label"><svg class="bookmark-heading-icon" viewBox="0 0 24 24" role="img" aria-label="保存したしおり" data-i18n-aria="bookmark.saved"><path d="M6 4.5A2.5 2.5 0 0 1 8.5 2h7A2.5 2.5 0 0 1 18 4.5V21l-6-4-6 4V4.5Z" /></svg></div>
+      <ul id="bookmark-list" aria-label="保存したしおり" data-i18n-aria="bookmark.saved"></ul>
       <ul id="toc-list"></ul>
     </div>
   </aside>
+
+  <aside id="search-drawer" class="drawer-panel" aria-label="検索" aria-hidden="true" tabindex="-1" inert data-i18n-aria="search.title">
+    <div class="drawer-header">
+      <span class="drawer-title" data-i18n="search.title">検索</span>
+      <button id="btn-close-search" class="icon-btn" type="button" aria-label="検索を閉じる" title="閉じる" data-i18n-aria="search.close" data-i18n-title="common.close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18" /></svg>
+      </button>
+    </div>
+    <div class="drawer-body">
+      <div class="search-controls">
+        <input id="search-query" type="search" aria-label="本文を検索" autocomplete="off" placeholder="本文から語句を検索" data-i18n-aria="search.query" data-i18n-placeholder="search.placeholder">
+        <div class="search-filter-navigation">
+          <div class="search-filter-group">
+            <div class="search-filter-row" role="group" aria-label="検索対象" data-i18n-aria="search.targets">
+              <label><input id="search-include-headings" type="checkbox" checked><span data-i18n="search.headings">見出し</span></label>
+              <label><input id="search-include-body" type="checkbox" checked><span data-i18n="search.body">本文</span></label>
+            </div>
+            <div class="search-filter-row" role="group" aria-label="文字種の区別" data-i18n-aria="search.variants">
+              <label class="search-variant-toggle" title="英字大小・全半角を区別" data-i18n-title="search.variants">
+                <input id="search-distinguish-variants" type="checkbox" aria-label="英字大小・全半角を区別" data-i18n-aria="search.variants">
+                <svg viewBox="0 0 42 24" aria-hidden="true"><text x="1" y="17">Aa</text><text x="20" y="17">ＡＡ</text></svg>
+              </label>
+            </div>
+            <span id="search-result-status" aria-live="polite"></span>
+          </div>
+          <div class="search-result-navigation" aria-label="検索結果の移動" data-i18n-aria="search.navigation">
+            <button id="btn-search-previous" class="action-btn" type="button" aria-label="前の検索結果へ" title="前の検索結果へ" data-i18n-aria="search.previous" data-i18n-title="search.previous"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 6-6 6 6" /></svg></button>
+            <button id="btn-search-next" class="action-btn" type="button" aria-label="次の検索結果へ" title="次の検索結果へ" data-i18n-aria="search.next" data-i18n-title="search.next"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 10 6 6 6-6" /></svg></button>
+          </div>
+        </div>
+      </div>
+      <ol id="search-results" aria-label="検索結果一覧" data-i18n-aria="search.results"></ol>
+    </div>
+  </aside>
+
+<script id="viewer-localization-data" type="application/json">
+{
+  "ja": {
+    "intro.title":"Hitohira","intro.summary":"外部サーバーや外部ライブラリに依存せず、1つのHTMLファイルで小説を読むためのビューアです。","intro.readTitle":"本文を読む","intro.readFiles":"TXT・Markdown・HTMLの本文を、設定メニューのファイル選択または画面へのドラッグ＆ドロップで読み込めます。本文は安全なHTMLへ変換して表示します。","intro.markdown":"Markdownでは見出し、表、リスト、引用、コードブロックなどに対応しています。ルビは「漢字《かんじ》」、対象語を指定する場合は「｜今日《こんにち》」の形式で記述できます。","intro.displayTitle":"表示と背景を整える","intro.display":"縦書き・横書き、明朝体・ゴシック体、文字サイズ、行間、字間、ルビ、本文幅、余白、配色、ライト・ダークテーマを調整できます。","intro.background":"PNG・APNG・JPEG・WebP・GIF・BMP・SVGの画像や、ブラウザーが再生できる動画を背景に設定できます。背景メディアはドラッグまたはタッチで移動でき、ダブルクリックで位置を戻せます。","intro.navigationTitle":"目次・検索とキーボード操作","intro.navigation":"本文の見出しから目次を作成できます。検索ボタンまたはCtrl+Fで見出し・本文を検索し、一致箇所を一覧から選んで移動できます。検索結果一覧を開いたまま本文を読み進められます。","intro.shortcuts":"読書位置、設定、読み込んだ本文と元ファイルは保存領域へ自動保存されます。本文上のクリックでページ送り、横書きでは矢印キー、縦書きでは左右キーで移動します。PageDown・PageUp・Space・Shift+Space、Home・Endも使えます。F1で操作一覧、Sで設定、Oで目次を表示します。","intro.exportTitle":"保存とエクスポート","intro.export":"HTMLエクスポートでは、本文・設定・背景メディア・必要な元ファイル情報を1つのHTMLに埋め込みます。外部ファイルや実行時の一時URLを必要とせず、単独で開けます。","intro.privacy":"読み込んだテキスト・画像・動画の元ファイルは、個別に元のバイト列のままエクスポートできます。個人情報や機密情報を含む本文・メディアを扱う場合は、共有やエクスポートの前に内容を確認してください。",
+    "common.close":"閉じる","settings.title":"設定","settings.open":"設定を開く","settings.close":"設定を閉じる","settings.theme":"テーマを切り替える","settings.help":"キーボードショートカットを表示","settings.helpTitle":"ヘルプ","settings.tocOpen":"目次を開く","settings.search":"本文を検索","settings.searchTitle":"検索 (Ctrl+F)","settings.writingMode":"書字方向","settings.horizontal":"横書き","settings.vertical":"縦書き","settings.font":"書体","settings.serif":"明朝体","settings.sans":"ゴシック体","settings.fontSize":"文字サイズ","settings.lineHeight":"行間隔","settings.letterSpacing":"文字間隔","settings.contentWidth":"本文幅","settings.contentPadding":"本文余白","settings.blur":"背景ぼかし","settings.ruby":"ルビサイズ","settings.bgColor":"背景色","settings.narrationColor":"文章の文字色","settings.dialogueColor":"台詞の文字色","settings.panelColor":"本文パネル色","settings.autoColor":"色を自動選択","settings.panelOpacity":"テキスト背景の不透明度","settings.progress":"読書進捗率を表示","settings.wakeLock":"画面スリープを防止","settings.import":"インポート","settings.fileTypes":"テキスト / 画像 / 動画","settings.importFile":"ファイルをインポート","settings.export":"エクスポート","settings.loadedFiles":"読み込みファイルとHTMLのダウンロード","settings.calculating":"計算中","settings.exportHtml":"HTMLを書き出す","settings.reset":"設定を初期化",
+    "help.title":"キーボードショートカット","help.close":"ヘルプを閉じる","help.key":"キー","help.action":"操作","help.arrows":"表示方向に合わせてスクロール","help.next":"次のページへ移動","help.previous":"前のページへ移動","help.pages":"次のページ / 前のページへ移動","help.ends":"先頭 / 末尾へ移動","help.fullscreen":"フルスクリーンを切り替え","help.show":"キーボードショートカットのヘルプを表示","help.openSettings":"設定を開く","help.openToc":"目次を開く","help.openSearch":"検索を開く","help.searchNextPrevious":"次 / 前の検索結果へ移動","help.escape":"設定・目次・検索を閉じる",
+    "toc.title":"目次","toc.close":"目次を閉じる","bookmark.name":"しおり名","bookmark.placeholder":"現在位置の名前（省略可）","bookmark.add":"現在位置にしおりを追加","bookmark.saved":"保存したしおり","bookmark.none":"しおりはありません","bookmark.defaultName":"しおり {time}","bookmark.jump":"しおり「{name}」へ移動","bookmark.delete":"しおり「{name}」を削除","bookmark.deleteTitle":"しおりを削除","toc.empty":"見出しが見つかりませんでした",
+    "search.title":"検索","search.close":"検索を閉じる","search.query":"本文を検索","search.placeholder":"本文から語句を検索","search.targets":"検索対象","search.headings":"見出し","search.body":"本文","search.variants":"英字大小・全半角を区別","search.navigation":"検索結果の移動","search.previous":"前の検索結果へ","search.next":"次の検索結果へ","search.results":"検索結果一覧","search.chooseTarget":"検索対象を選択","search.none":"一致する箇所はありません","search.count":"{count}件","search.countTruncated":"{count}件（先頭500件）","search.position":"{index} / {count}{suffix}","search.resultLabel":"検索結果 {index}: {heading}。{text}",
+    "status.unsupported":"（利用不可）","status.waiting":"（待機中）","status.active":"（有効）","status.failed":"（取得失敗）","settings.save.saving":"保存中","settings.save.saved":"保存済み","settings.save.failed":"保存失敗","settings.save.conflict":"別タブで変更されました。再読み込みしてください。","theme.light":"ライトテーマに切り替え","theme.dark":"ダークテーマに切り替え","color.autoAvailable":"背景画像の平均色から本文色を自動設定","color.autoUnavailable":"背景画像を読み込むと使用できます","file.text":"テキスト","file.image":"画像","file.video":"動画","file.delete":"{label}の実行時データを削除","file.size":"{label}ファイルのサイズ",
+    "error.storage":"設定・読書位置を保存できませんでした。ブラウザーの保存領域を確認してください。復旧後、次の変更時に再保存します。","error.saveBusy":"別の保存処理が進行中です。完了後にもう一度お試しください。","error.operation":"{label}に失敗しました。操作をやり直してください。問題が続く場合は、ブラウザーの開発者コンソールで詳細を確認できます。","error.media":"背景メディアを読み込めませんでした。","error.videoAutoplay":"ブラウザーが背景動画の自動再生を拒否しました。","error.importQuota":"ブラウザーの保存領域が不足しているため、元ファイルを保存できません。","error.savedDataRecovery":"保存処理を復旧できませんでした。保存データと復旧記録は保持しています。このタブを閉じて再度開いてください。エラーが続く場合は、保存領域を消去せず復旧ガイドを確認してください。","error.importDecode":"画像データをデコードできません。","error.importDimensions":"画像の幅または高さを取得できません。","error.videoMetadata":"動画のメタデータを読み込めません。","error.videoDimensions":"動画の寸法を取得できません。","error.unsupported":"対応していないファイル形式です。","error.importText":"テキストを読み込めませんでした。ファイルの破損やアクセス権を確認してください。","error.importMedia":"画像・動画を読み込めませんでした。形式やファイルの破損、保存領域を確認してください。","error.readText":"文字コードを判定できません。UTF-8またはUTF-16のファイルを使用してください。","error.noMedia":"背景メディアのデータを取得できませんでした。","error.reset":"設定の初期化に失敗しました。","error.exportData":"エクスポートHTMLの内蔵データを復元できませんでした。","error.embeddedData":"エクスポートデータが不正です。","error.embeddedMedia":"背景メディアの内蔵データが不正です。","error.mediaRead":"背景メディアを読み出せませんでした。","error.mediaConvert":"背景メディアをData URLへ変換できませんでした。","error.exportHead":"エクスポート先のhead要素が見つかりません。","error.crypto":"この環境ではSHA-256を計算できません。HTTPSまたはlocalhostで開いてください。","error.invalidBookmark":"保存したしおりの形式が正しくありません。","error.noHeadings":"見出しが見つかりませんでした","error.noBookmarks":"しおりはありません","error.chooseTarget":"検索対象を選択","error.noMatches":"一致する箇所はありません","error.calculating":"計算中","error.unavailable":"計測不可","error.importKinds":"対応していないファイル形式です。","error.importTextPrefix":"テキストを読み込めませんでした。ファイルの破損やアクセス権を確認してください。","error.importMediaPrefix":"画像・動画を読み込めませんでした。形式やファイルの破損、保存領域を確認してください。","file.saveTextTitle":"読み込んだテキストファイルをSHA-256名で保存","file.saveImageTitle":"読み込んだ画像ファイルをSHA-256名で保存","file.saveVideoTitle":"読み込んだ動画ファイルをSHA-256名で保存","bookmark.loadFailed":"保存したしおりを読み込めませんでした:","bookmark.malformed":"保存したしおりの形式が正しくありません。","operation.importDelete":"元ファイルの削除","operation.textDownload":"テキストのダウンロード","operation.imageDownload":"画像のダウンロード","operation.videoDownload":"動画のダウンロード","operation.htmlExport":"HTMLのエクスポート","operation.reset":"設定の初期化"
+  },
+  "en": {
+    "intro.title":"Hitohira","intro.summary":"A novel viewer that runs from one HTML file without external servers or libraries.","intro.readTitle":"Read a novel","intro.readFiles":"Load TXT, Markdown, or HTML files from Settings, or drag and drop them onto the page. Imported content is converted to safe HTML before display.","intro.markdown":"Markdown headings, tables, lists, quotes, and code blocks are supported. Write ruby as 漢字《かんじ》, or use ｜今日《こんにち》 to specify the base text.","intro.displayTitle":"Adjust display and background","intro.display":"Adjust writing direction, typeface, font size, line and letter spacing, ruby, content width, padding, colors, and light or dark theme.","intro.background":"Use PNG, APNG, JPEG, WebP, GIF, BMP, or SVG images, or browser-playable video as a background. Drag or touch to move it; double-click to reset its position.","intro.navigationTitle":"Contents, search, and keyboard","intro.navigation":"Build a table of contents from headings. Use Search or Ctrl+F to find headings and body text, then choose a result to jump to it. Keep the results list open while reading.","intro.shortcuts":"Reading position, settings, imported content, and source files are saved locally. Click the text to turn pages. Use arrow keys for the current writing direction, PageDown/PageUp, Space/Shift+Space, and Home/End. Press F1 for shortcuts, S for Settings, or O for Contents.","intro.exportTitle":"Storage and export","intro.export":"HTML export embeds the content, settings, background media, and required source-file data in one standalone file. It needs no external files or temporary runtime URLs.","intro.privacy":"Source text, images, and videos can be exported individually in their original bytes. Review content before sharing or exporting material that contains personal or confidential information.",
+    "common.close":"Close","settings.title":"Settings","settings.open":"Open settings","settings.close":"Close settings","settings.theme":"Change theme","settings.help":"Show keyboard shortcuts","settings.helpTitle":"Help","settings.tocOpen":"Open contents","settings.search":"Search body text","settings.searchTitle":"Search (Ctrl+F)","settings.writingMode":"Writing direction","settings.horizontal":"Horizontal","settings.vertical":"Vertical","settings.font":"Typeface","settings.serif":"Serif","settings.sans":"Sans serif","settings.fontSize":"Font size","settings.lineHeight":"Line spacing","settings.letterSpacing":"Letter spacing","settings.contentWidth":"Content width","settings.contentPadding":"Content padding","settings.blur":"Background blur","settings.ruby":"Ruby size","settings.bgColor":"Background color","settings.narrationColor":"Narration color","settings.dialogueColor":"Dialogue color","settings.panelColor":"Reading panel color","settings.autoColor":"Automatic colors","settings.panelOpacity":"Text background opacity","settings.progress":"Show reading progress","settings.wakeLock":"Prevent screen sleep","settings.import":"Import","settings.fileTypes":"Text / Image / Video","settings.importFile":"Import files","settings.export":"Export","settings.loadedFiles":"Download imported files and HTML","settings.calculating":"Calculating","settings.exportHtml":"Export HTML","settings.reset":"Reset settings",
+    "help.title":"Keyboard shortcuts","help.close":"Close help","help.key":"Key","help.action":"Action","help.arrows":"Scroll in the current reading direction","help.next":"Next page","help.previous":"Previous page","help.pages":"Next page / Previous page","help.ends":"Beginning / End","help.fullscreen":"Toggle fullscreen","help.show":"Show keyboard shortcuts","help.openSettings":"Open settings","help.openToc":"Open contents","help.openSearch":"Open search","help.searchNextPrevious":"Next / Previous search result","help.escape":"Close settings, contents, or search",
+    "toc.title":"Contents","toc.close":"Close contents","bookmark.name":"Bookmark name","bookmark.placeholder":"Name this position (optional)","bookmark.add":"Add a bookmark at the current position","bookmark.saved":"Saved bookmarks","bookmark.none":"No bookmarks","bookmark.defaultName":"Bookmark {time}","bookmark.jump":"Go to bookmark \"{name}\"","bookmark.delete":"Delete bookmark \"{name}\"","bookmark.deleteTitle":"Delete bookmark","toc.empty":"No headings found",
+    "search.title":"Search","search.close":"Close search","search.query":"Search body text","search.placeholder":"Search the text","search.targets":"Search in","search.headings":"Headings","search.body":"Body","search.variants":"Distinguish case and character width","search.navigation":"Navigate search results","search.previous":"Previous search result","search.next":"Next search result","search.results":"Search results","search.chooseTarget":"Choose a search target","search.none":"No matches found","search.count":"{count} matches","search.countTruncated":"{count} matches (first 500)","search.position":"{index} / {count}{suffix}","search.resultLabel":"Search result {index}: {heading}. {text}",
+    "status.unsupported":"(Unavailable)","status.waiting":"(Waiting)","status.active":"(Active)","status.failed":"(Failed)","settings.save.saving":"Saving","settings.save.saved":"Saved","settings.save.failed":"Save failed","settings.save.conflict":"Changed in another tab. Reload to continue.","theme.light":"Switch to light theme","theme.dark":"Switch to dark theme","color.autoAvailable":"Set text colors from the background image","color.autoUnavailable":"Load a background image to use this","file.text":"Text","file.image":"Image","file.video":"Video","file.delete":"Delete runtime {label} data","file.size":"{label} file size",
+    "error.storage":"Could not save settings or reading position. Check browser storage; changes will be saved again after it is available.","error.saveBusy":"Another save is in progress. Try again when it finishes.","error.operation":"Could not {label}. Please try again. If the problem continues, check the browser developer console for details.","error.media":"Could not load the background media.","error.videoAutoplay":"The browser blocked automatic playback of the background video.","error.importQuota":"Browser storage is full, so the source file could not be saved.","error.savedDataRecovery":"A saved change could not be recovered. Your saved data and recovery record are preserved. Close this tab and reopen the viewer. If the error continues, do not clear browser storage; follow the recovery guide.","error.importDecode":"The image data could not be decoded.","error.importDimensions":"Could not read the image dimensions.","error.videoMetadata":"Could not read the video metadata.","error.videoDimensions":"Could not read the video dimensions.","error.unsupported":"Unsupported file format.","error.importText":"Could not read the text file. Check that it is valid and accessible.","error.importMedia":"Could not load the image or video. Check its format, integrity, and available storage.","error.readText":"Could not detect the text encoding. Use UTF-8 or UTF-16.","error.noMedia":"Could not retrieve the background media data.","error.reset":"Could not reset the settings.","error.exportData":"Could not restore embedded data from the exported HTML.","error.embeddedData":"The embedded data is invalid.","error.embeddedMedia":"The embedded background media is invalid.","error.mediaRead":"Could not read the background media.","error.mediaConvert":"Could not convert the background media to a Data URL.","error.exportHead":"The export document has no head element.","error.crypto":"SHA-256 is unavailable in this environment. Open the file over HTTPS or localhost.","error.invalidBookmark":"The saved bookmark data is invalid.","error.noHeadings":"No headings found","error.noBookmarks":"No bookmarks","error.chooseTarget":"Choose a search target","error.noMatches":"No matches found","error.calculating":"Calculating","error.unavailable":"Unavailable","error.importKinds":"Unsupported file format.","error.importTextPrefix":"Could not read the text file. Check that it is valid and accessible.","error.importMediaPrefix":"Could not load the image or video. Check its format, integrity, and available storage.","file.saveTextTitle":"Save imported text using its SHA-256 hash","file.saveImageTitle":"Save imported image using its SHA-256 hash","file.saveVideoTitle":"Save imported video using its SHA-256 hash","bookmark.loadFailed":"Could not load saved bookmarks:","bookmark.malformed":"The saved bookmark data is invalid.","operation.importDelete":"delete imported file data","operation.textDownload":"download text","operation.imageDownload":"download image","operation.videoDownload":"download video","operation.htmlExport":"export HTML","operation.reset":"reset settings"
+  }
+}
+</script>
 
 <script id="viewer-initial-config" type="application/json">
 {
@@ -1112,10 +1255,12 @@ SOFTWARE.
   const STORAGE_KEYS = {
     SETTINGS: 'hitohira_settings',
     POSITION: 'hitohira_position',
+    BOOKMARKS: 'hitohira_bookmarks',
     CONTENT:  'hitohira_content'
   };
   let currentDocumentId = 'default';
   const getPositionStorageKey = () => `${STORAGE_KEYS.POSITION}:${currentDocumentId}`;
+  const getBookmarksStorageKey = () => `${STORAGE_KEYS.BOOKMARKS}:${currentDocumentId}`;
   function makeDocumentId(value) {
     let hash = 2166136261;
     for (const char of String(value || '')) { hash ^= char.charCodeAt(0); hash = Math.imul(hash, 16777619); }
@@ -1126,6 +1271,63 @@ SOFTWARE.
   const MEDIA_STORE_NAME = 'background_media';
   const MEDIA_STORE_KEY = 'current';
   const TEXT_STORE_KEY = 'current_text';
+  const MEDIA_TRANSACTION_KEY = '__pending_transaction__';
+  const SAVED_DATA_JOURNAL_KEY = 'hitohira_pending_saved_data_transaction';
+  const SAVED_DATA_REVISION_KEY = 'hitohira_saved_data_revision';
+  const SAVED_DATA_LOCK_KEY = 'hitohira_saved_data_lock';
+  const SAVED_DATA_LOCK_NAME = 'hitohira_saved_data';
+  const SAVED_DATA_LOCK_OWNER = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  async function withSavedDataLock(operation) {
+    if (typeof navigator !== 'undefined' && navigator.locks && typeof navigator.locks.request === 'function') {
+      const deadline = Date.now() + 10000;
+      while (true) {
+        let acquired = false;
+        const result = await navigator.locks.request(
+          SAVED_DATA_LOCK_NAME,
+          { mode: 'exclusive', ifAvailable: true },
+          lock => {
+            if (!lock) return false;
+            acquired = true;
+            return operation();
+          }
+        );
+        if (acquired) return result;
+        if (Date.now() >= deadline) throw new Error('別のタブが保存中です。少し待ってから再試行してください。');
+        await new Promise(resolve => setTimeout(resolve, 40 + Math.random() * 60));
+      }
+    }
+    const deadline = Date.now() + 10000;
+    const leaseDuration = 30000;
+    const acquire = () => {
+      let current = null;
+      try { current = JSON.parse(localStorage.getItem(SAVED_DATA_LOCK_KEY) || 'null'); } catch (_) {}
+      if (current && current.owner !== SAVED_DATA_LOCK_OWNER && current.expiresAt > Date.now()) return false;
+      localStorage.setItem(SAVED_DATA_LOCK_KEY, JSON.stringify({ owner: SAVED_DATA_LOCK_OWNER, expiresAt: Date.now() + leaseDuration }));
+      try { return JSON.parse(localStorage.getItem(SAVED_DATA_LOCK_KEY) || 'null')?.owner === SAVED_DATA_LOCK_OWNER; }
+      catch (_) { return false; }
+    };
+    while (!acquire()) {
+      if (Date.now() >= deadline) throw new Error('別のタブが保存中です。少し待ってから再試行してください。');
+      await new Promise(resolve => setTimeout(resolve, 40 + Math.random() * 60));
+    }
+    const heartbeat = setInterval(() => {
+      try {
+        const current = JSON.parse(localStorage.getItem(SAVED_DATA_LOCK_KEY) || 'null');
+        if (current?.owner === SAVED_DATA_LOCK_OWNER) {
+          localStorage.setItem(SAVED_DATA_LOCK_KEY, JSON.stringify({ owner: SAVED_DATA_LOCK_OWNER, expiresAt: Date.now() + leaseDuration }));
+        }
+      } catch (_) {}
+    }, 10000);
+    try { return await operation(); }
+    finally {
+      clearInterval(heartbeat);
+      try {
+        const current = JSON.parse(localStorage.getItem(SAVED_DATA_LOCK_KEY) || 'null');
+        if (current?.owner === SAVED_DATA_LOCK_OWNER) localStorage.removeItem(SAVED_DATA_LOCK_KEY);
+      } catch (_) {}
+    }
+  }
 
   function openMediaDatabase() {
     return new Promise((resolve, reject) => {
@@ -1141,27 +1343,17 @@ SOFTWARE.
   }
 
   async function storeBackgroundMedia(blob, mediaType) {
-    const db = await openMediaDatabase();
-    try {
-      await new Promise((resolve, reject) => {
-        const tx = db.transaction(MEDIA_STORE_NAME, 'readwrite');
-        tx.objectStore(MEDIA_STORE_NAME).put({ blob, mediaType, fileExtension: blob && blob.name ? getFileExtension(blob.name) : '', updatedAt: Date.now() }, MEDIA_STORE_KEY);
-        tx.oncomplete = resolve;
-        tx.onabort = () => reject(tx.error || new Error('IndexedDB write aborted'));
-      });
-    } finally { db.close(); }
+    return withSavedDataLock(async () => {
+      if (settingsPersistence.conflicted) return false;
+      await applyIndexedDbOperations([{ type: 'put', key: MEDIA_STORE_KEY, value: { blob, mediaType, fileExtension: blob && blob.name ? getFileExtension(blob.name) : '', updatedAt: Date.now() } }]);
+      try { localStorage.setItem(SAVED_DATA_REVISION_KEY, String(Date.now())); }
+      catch (error) { console.warn('別タブへの媒体保存通知に失敗しました:', error); }
+      return true;
+    });
   }
 
   async function storeImportedText(blob, extension) {
-    const db = await openMediaDatabase();
-    try {
-      await new Promise((resolve, reject) => {
-        const tx = db.transaction(MEDIA_STORE_NAME, 'readwrite');
-        tx.objectStore(MEDIA_STORE_NAME).put({ blob, fileExtension: extension || '', updatedAt: Date.now() }, TEXT_STORE_KEY);
-        tx.oncomplete = resolve;
-        tx.onabort = () => reject(tx.error || new Error('Text file write aborted'));
-      });
-    } finally { db.close(); }
+    return applyIndexedDbOperations([{ type: 'put', key: TEXT_STORE_KEY, value: { blob, fileExtension: extension || '', updatedAt: Date.now() } }]);
   }
 
   async function loadImportedText() {
@@ -1189,16 +1381,24 @@ SOFTWARE.
   }
 
   async function deleteMediaRecords(keys) {
-    if (!keys.length) return;
+    return applyIndexedDbOperations(keys.map(key => ({ type: 'delete', key })));
+  }
+
+  async function applyIndexedDbOperations(operations) {
+    if (!operations.length) return;
     const db = await openMediaDatabase();
     try {
       await new Promise((resolve, reject) => {
         const tx = db.transaction(MEDIA_STORE_NAME, 'readwrite');
         tx.oncomplete = resolve;
-        tx.onabort = () => reject(tx.error || new Error('IndexedDB delete aborted'));
+        tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
         const store = tx.objectStore(MEDIA_STORE_NAME);
         try {
-          for (const key of keys) store.delete(key);
+          for (const operation of operations) {
+            if (operation.type === 'put') store.put(operation.value, operation.key);
+            else if (operation.type === 'delete') store.delete(operation.key);
+            else throw new Error('Unknown IndexedDB operation');
+          }
         } catch (error) {
           tx.abort();
           reject(error);
@@ -1207,29 +1407,123 @@ SOFTWARE.
     } finally { db.close(); }
   }
 
+  async function loadPendingSavedDataOperations() {
+    const db = await openMediaDatabase();
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(MEDIA_STORE_NAME, 'readonly');
+        const request = tx.objectStore(MEDIA_STORE_NAME).get(MEDIA_TRANSACTION_KEY);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error || new Error('復旧記録の読み取りに失敗しました'));
+      });
+    } finally { db.close(); }
+  }
+
   let changingSavedData = false;
-  async function changeSavedData(changes, mediaKeys) {
+  function commitSavedData(changes, indexedDbOperations = []) {
+    if (settingsPersistence.conflicted) return Promise.resolve(false);
+    return withSavedDataLock(() => settingsPersistence.conflicted
+      ? false
+      : commitSavedDataWhileLocked(changes, indexedDbOperations));
+  }
+
+  async function commitSavedDataWhileLocked(changes, indexedDbOperations = []) {
     if (changingSavedData) return false;
     const write = (key, value) => value === null ? localStorage.removeItem(key) : localStorage.setItem(key, value);
     const previous = changes.map(([key]) => [key, localStorage.getItem(key)]);
-    let applied = 0;
+    let indexedDbCommitted = false;
     changingSavedData = true;
     try {
-      for (const [key, value] of changes) {
-        write(key, value);
-        applied++;
+      if (indexedDbOperations.length) {
+        const transaction = { version: 1, localStorage: changes, indexedDb: indexedDbOperations };
+        localStorage.setItem(SAVED_DATA_JOURNAL_KEY, JSON.stringify({ version: 1, hasIndexedDbOperations: true }));
+        await applyIndexedDbOperations([{ type: 'put', key: MEDIA_TRANSACTION_KEY, value: transaction }]);
+        await applySavedDataTransaction(transaction);
+        indexedDbCommitted = true;
+        localStorage.removeItem(SAVED_DATA_JOURNAL_KEY);
+      } else {
+        for (const [key, value] of changes) write(key, value);
       }
-      await deleteMediaRecords(mediaKeys);
       return true;
     } catch (error) {
-      for (const [key, value] of previous.slice(0, applied).reverse()) {
+      if (indexedDbCommitted) {
+        try { localStorage.removeItem(SAVED_DATA_JOURNAL_KEY); }
+        catch (cleanupError) { console.error('保存処理の後始末に失敗しました:', cleanupError); }
+        return true;
+      }
+      let rollbackSucceeded = true;
+      for (const [key, value] of previous.reverse()) {
         try { write(key, value); }
-        catch (rollbackError) { console.error('保存データを元に戻せませんでした:', rollbackError); }
+        catch (rollbackError) {
+          rollbackSucceeded = false;
+          console.error('保存データを元に戻せませんでした:', rollbackError);
+        }
+      }
+      if (rollbackSucceeded) {
+        try {
+          if (indexedDbOperations.length) await applyIndexedDbOperations([{ type: 'delete', key: MEDIA_TRANSACTION_KEY }]);
+          localStorage.removeItem(SAVED_DATA_JOURNAL_KEY);
+        } catch (cleanupError) {
+          console.error('保存処理の後始末に失敗しました:', cleanupError);
+        }
       }
       throw error;
     } finally {
       changingSavedData = false;
     }
+  }
+
+  function isValidSavedDataTransaction(transaction) {
+    const allowedIndexedDbKeys = new Set([MEDIA_STORE_KEY, TEXT_STORE_KEY, MEDIA_TRANSACTION_KEY]);
+    const allowedLocalStorageKeys = new Set([
+      'hitohira_settings', 'hitohira_content', 'hitohira_position', 'hitohira_bookmarks', SAVED_DATA_REVISION_KEY
+    ]);
+    const isAllowedKey = key => allowedLocalStorageKeys.has(key) ||
+      typeof key === 'string' && (/^hitohira_position:(?:[a-f0-9]+|exported|default)$/.test(key) || /^hitohira_bookmarks:(?:[a-f0-9]+|document|default)$/.test(key));
+    const valid = Boolean(transaction && transaction.version === 1 && Array.isArray(transaction.localStorage) &&
+      Array.isArray(transaction.indexedDb) && transaction.localStorage.every(change =>
+        Array.isArray(change) && change.length === 2 && isAllowedKey(change[0]) &&
+        (change[1] === null || typeof change[1] === 'string')) &&
+      transaction.indexedDb.every(operation => operation && ['put', 'delete'].includes(operation.type) &&
+        allowedIndexedDbKeys.has(operation.key) &&
+        (operation.type !== 'put' || operation.value && typeof operation.value === 'object')));
+    return valid;
+  }
+
+  async function applySavedDataTransaction(transaction) {
+    if (!isValidSavedDataTransaction(transaction)) {
+      throw new Error('保存処理の復旧記録が不正です。');
+    }
+    for (const [key, value] of transaction.localStorage) {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    }
+    await applyIndexedDbOperations([...transaction.indexedDb, { type: 'delete', key: MEDIA_TRANSACTION_KEY }]);
+  }
+
+  async function recoverSavedDataTransaction() {
+    const serialized = localStorage.getItem(SAVED_DATA_JOURNAL_KEY);
+    if (!serialized) {
+      const orphanedTransaction = await loadPendingSavedDataOperations();
+      if (orphanedTransaction) throw new Error('保存処理の復旧記録を確認できません。データを保持したまま起動を中止しました。');
+      return false;
+    }
+    const transaction = JSON.parse(serialized);
+    if (transaction.version !== 1 || transaction.hasIndexedDbOperations !== true) {
+      throw new Error('保存処理の復旧記録が不正です。');
+    }
+    const stagedTransaction = await loadPendingSavedDataOperations();
+    if (stagedTransaction) {
+      await applySavedDataTransaction(stagedTransaction);
+      localStorage.removeItem(SAVED_DATA_JOURNAL_KEY);
+    } else {
+      throw new Error('IndexedDBの保存処理記録が見つかりません。データを保持したまま起動を中止しました。');
+    }
+    return true;
+  }
+
+  function changeSavedData(changes, mediaKeys) {
+    return commitSavedData(changes, mediaKeys.map(key => ({ type: 'delete', key })));
   }
 
   function blobToDataUrl(blob) {
@@ -1265,27 +1559,68 @@ SOFTWARE.
 
   const embeddedConfigEl = document.getElementById('viewer-initial-config');
   const DEFAULT_SETTINGS = JSON.parse(embeddedConfigEl.textContent);
+  const EMBEDDED_DATA_SCHEMA_VERSION = 1;
+  const localizationData = JSON.parse(document.getElementById('viewer-localization-data').textContent);
+  let currentLanguage = 'ja';
+
+  function translate(key, values = {}) {
+    const template = localizationData[currentLanguage]?.[key] ?? localizationData.ja[key] ?? key;
+    return template.replace(/\{([a-zA-Z]+)\}/g, (_, name) => String(values[name] ?? ''));
+  }
+
+  function resolveBrowserLanguage(language) {
+    const preferredLanguages = Array.isArray(language) ? language : [language];
+    for (const preferredLanguage of preferredLanguages) {
+      if (typeof preferredLanguage !== 'string') continue;
+      if (/^en(?:-|$)/i.test(preferredLanguage)) return 'en';
+      if (/^ja(?:-|$)/i.test(preferredLanguage)) return 'ja';
+    }
+    return 'ja';
+  }
+
+  function applyLanguage(language) {
+    currentLanguage = localizationData[language] ? language : 'ja';
+    document.documentElement.lang = currentLanguage;
+    document.querySelectorAll('[data-i18n]').forEach(element => {
+      element.textContent = translate(element.dataset.i18n);
+    });
+    document.querySelectorAll('[data-i18n-aria]').forEach(element => {
+      element.setAttribute('aria-label', translate(element.dataset.i18nAria));
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach(element => {
+      element.title = translate(element.dataset.i18nTitle);
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(element => {
+      element.placeholder = translate(element.dataset.i18nPlaceholder);
+    });
+    if (typeof settingsSaveStatusEl !== 'undefined' && settingsSaveStatusEl.dataset.state) {
+      setSettingsSaveStatus(settingsSaveStatusEl.dataset.state);
+    }
+  }
 
   const novelContentElement = document.getElementById('novel-content');
   const initialNovelContentHtml = novelContentElement.innerHTML;
   let viewerResetDefaults;
+  let viewerResetComparableContent = null;
 
   let activeViewerSettings = { ...DEFAULT_SETTINGS };
   let themeDerivedColors = { ...THEME_PALETTES.light };
-  let backgroundMediaDataUrl = null;
-  let backgroundMediaObjectUrl = null;
+  const backgroundMediaState = {
+    dataUrl: null,
+    objectUrl: null,
+    mediaType: null,
+    fileBlob: null,
+    fileExtension: '',
+    lastLoadedImage: null,
+    naturalWidth: 0,
+    naturalHeight: 0,
+    offsetX: 0,
+    offsetY: 0
+  };
   let isRestoringReadingPosition = false;
-  let backgroundMediaType = null;
   let importedTextFileBlob = null;
   let importedTextFileExtension = '';
-  let backgroundMediaFileBlob = null;
-  let backgroundMediaFileExtension = '';
-  let lastLoadedImageElement = null;
   const backgroundVideo = document.getElementById("background-video");
-  let backgroundMediaNaturalWidth = 0;
-  let backgroundMediaNaturalHeight = 0;
-  let backgroundMediaOffsetX = 0;
-  let backgroundMediaOffsetY = 0;
   let screenWakeLock = null;
   const isMediaType = type => type === 'image' || type === 'video';
   const setBackgroundImageStyle = value => {
@@ -1295,6 +1630,11 @@ SOFTWARE.
   };
   let tableOfContentsEntries = [];
   let activeTableOfContentsEntryId = null;
+  let searchResults = [];
+  let searchResultsTruncated = false;
+  let activeSearchResultIndex = -1;
+  let activeSearchElement = null;
+  const maxSearchResults = 500;
   let heldScrollTimer = null;
   let heldScrollDelta = 0;
   let heldScrollVertical = false;
@@ -1312,8 +1652,23 @@ SOFTWARE.
   const progressIndicator = document.getElementById('progress-indicator');
 
   const settingsDrawer = document.getElementById('settings-drawer');
+  const settingsSaveStatusEl = document.getElementById('settings-save-status');
   const tocDrawer = document.getElementById('toc-drawer');
+  const searchDrawer = document.getElementById('search-drawer');
   const tocListEl = document.getElementById('toc-list');
+  const bookmarkListEl = document.getElementById('bookmark-list');
+  const bookmarkNameInput = document.getElementById('bookmark-name');
+  const btnAddBookmark = document.getElementById('btn-add-bookmark');
+  const searchQueryInput = document.getElementById('search-query');
+  const searchIncludeHeadings = document.getElementById('search-include-headings');
+  const searchIncludeBody = document.getElementById('search-include-body');
+  const searchDistinguishVariants = document.getElementById('search-distinguish-variants');
+  const searchResultList = document.getElementById('search-results');
+  const searchResultStatus = document.getElementById('search-result-status');
+  const btnOpenSearch = document.getElementById('btn-open-search');
+  const btnCloseSearch = document.getElementById('btn-close-search');
+  const btnSearchPrevious = document.getElementById('btn-search-previous');
+  const btnSearchNext = document.getElementById('btn-search-next');
 
   const btnOpenSettings = document.getElementById('btn-open-settings');
   const btnCloseSettings = document.getElementById('btn-close-settings');
@@ -1365,17 +1720,17 @@ SOFTWARE.
   async function updateScreenWakeLock() {
     const supported = 'wakeLock' in navigator && typeof navigator.wakeLock.request === 'function';
     wakeLockControl.disabled = !supported;
-    if (!supported) { wakeLockStatus.textContent = '（利用不可）'; await releaseScreenWakeLock(); return; }
+    if (!supported) { wakeLockStatus.textContent = translate('status.unsupported'); await releaseScreenWakeLock(); return; }
     if (!activeViewerSettings.wakeLock || document.visibilityState !== 'visible') {
-      wakeLockStatus.textContent = activeViewerSettings.wakeLock ? '（待機中）' : '';
+      wakeLockStatus.textContent = activeViewerSettings.wakeLock ? translate('status.waiting') : '';
       await releaseScreenWakeLock();
       return;
     }
     try {
       if (!screenWakeLock) screenWakeLock = await navigator.wakeLock.request('screen');
       screenWakeLock.addEventListener('release', () => { screenWakeLock = null; });
-      wakeLockStatus.textContent = '（有効）';
-    } catch (_) { wakeLockStatus.textContent = '（取得失敗）'; }
+      wakeLockStatus.textContent = translate('status.active');
+    } catch (_) { wakeLockStatus.textContent = translate('status.failed'); }
   }
 
   function updateResetButtonState() {
@@ -1383,6 +1738,12 @@ SOFTWARE.
       const wrapper = document.createElement('div');
       wrapper.innerHTML = html || '';
       wrapper.querySelectorAll('[id^="heading-"]').forEach(element => element.removeAttribute('id'));
+      wrapper.querySelectorAll('[data-i18n], [data-i18n-aria], [data-i18n-title], [data-i18n-placeholder]').forEach(element => {
+        element.removeAttribute('data-i18n');
+        element.removeAttribute('data-i18n-aria');
+        element.removeAttribute('data-i18n-title');
+        element.removeAttribute('data-i18n-placeholder');
+      });
       return wrapper.innerHTML.trim();
     };
     const valuesEqual = (current, initial) => {
@@ -1392,10 +1753,14 @@ SOFTWARE.
     };
     const defaults = getViewerResetDefaults();
     const settingsDefault = Object.keys(defaults.settings).every(key => valuesEqual(activeViewerSettings[key], defaults.settings[key]));
-    const contentDefault = comparableContent(novelContentElement.innerHTML) === comparableContent(defaults.content);
+    if (viewerResetComparableContent === null) viewerResetComparableContent = comparableContent(sanitizeHTML(defaults.content));
+    const contentDefault = comparableContent(novelContentElement.innerHTML) === viewerResetComparableContent;
+    let hasBookmarks = false;
+    try { hasBookmarks = readBookmarks().length > 0; }
+    catch (error) { console.warn('保存したしおりを読み込めませんでした:', error); }
     // Reading position and background offsets are intentionally excluded.
-    const sourcesDefault = !backgroundMediaDataUrl && !importedTextFileBlob && !backgroundMediaFileBlob &&
-      !activeViewerSettings.fileStem && !activeViewerSettings.documentTitle;
+    const sourcesDefault = !backgroundMediaState.dataUrl && !importedTextFileBlob && !backgroundMediaState.fileBlob &&
+      !activeViewerSettings.fileStem && !activeViewerSettings.documentTitle && !hasBookmarks;
     btnResetAll.disabled = settingsDefault && contentDefault && sourcesDefault;
     btnResetAll.setAttribute('aria-disabled', String(btnResetAll.disabled));
   }
@@ -1414,14 +1779,14 @@ SOFTWARE.
   function reportLocalStorageWrite(key, error) {
     if (!failedLocalStorageWrites.has(key)) {
       failedLocalStorageWrites.add(key);
-      showErrorNotice('設定・読書位置を保存できませんでした。ブラウザーの保存領域を確認してください。復旧後、次の変更時に再保存します。');
+      showErrorNotice(translate('error.storage'));
     }
     console.error('ブラウザーの保存領域へ書き込めませんでした:', key, error);
   }
 
   function confirmLocalStorageWrite(key) {
     failedLocalStorageWrites.delete(key);
-    if (failedLocalStorageWrites.size === 0 && errorNoticeMessage.textContent.startsWith('設定・読書位置を保存できませんでした。')) {
+    if (failedLocalStorageWrites.size === 0 && errorNoticeMessage.textContent.startsWith(translate('error.storage'))) {
       hideErrorNotice();
     }
   }
@@ -1459,15 +1824,15 @@ SOFTWARE.
     if (bytes[0] === 0xff && bytes[1] === 0xfe) encoding = 'utf-16le';
     else if (bytes[0] === 0xfe && bytes[1] === 0xff) encoding = 'utf-16be';
     const text = new TextDecoder(encoding, { fatal: false }).decode(buffer).replace(/^\uFEFF/, '');
-    if ((text.match(/\uFFFD/g) || []).length > Math.max(2, text.length * 0.01)) throw new Error('文字コードを判定できません。UTF-8またはUTF-16のファイルを使用してください。');
+    if ((text.match(/\uFFFD/g) || []).length > Math.max(2, text.length * 0.01)) throw new Error(translate('error.readText'));
     return text;
   }
 
   function getExportButtonDefinitions(textBlob, mediaBlob, mediaType) {
     return [
-      { id: 'btn-download-text', label: 'テキスト', title: '読み込んだテキストファイルをSHA-256名で保存', available: textBlob instanceof Blob },
-      { id: 'btn-download-image', label: '画像', title: '読み込んだ画像ファイルをSHA-256名で保存', available: mediaBlob instanceof Blob && mediaType === 'image' },
-      { id: 'btn-download-video', label: '動画', title: '読み込んだ動画ファイルをSHA-256名で保存', available: mediaBlob instanceof Blob && mediaType === 'video' }
+      { id: 'btn-download-text', label: translate('file.text'), title: translate('file.saveTextTitle'), available: textBlob instanceof Blob },
+      { id: 'btn-download-image', label: translate('file.image'), title: translate('file.saveImageTitle'), available: mediaBlob instanceof Blob && mediaType === 'image' },
+      { id: 'btn-download-video', label: translate('file.video'), title: translate('file.saveVideoTitle'), available: mediaBlob instanceof Blob && mediaType === 'video' }
     ];
   }
 
@@ -1493,7 +1858,7 @@ SOFTWARE.
   }
 
   function refreshExportButtons() {
-    const buttonDefinitions = getExportButtonDefinitions(importedTextFileBlob, backgroundMediaFileBlob, backgroundMediaType);
+    const buttonDefinitions = getExportButtonDefinitions(importedTextFileBlob, backgroundMediaState.fileBlob, backgroundMediaState.mediaType);
     for (const definition of buttonDefinitions) {
       const existingButton = loadedFileDownloads.querySelector(`#${definition.id}`);
       const existingGroup = existingButton?.closest('.file-action-group');
@@ -1502,7 +1867,7 @@ SOFTWARE.
         continue;
       }
       if (existingButton) {
-        const blob = definition.id === 'btn-download-text' ? importedTextFileBlob : backgroundMediaFileBlob;
+        const blob = definition.id === 'btn-download-text' ? importedTextFileBlob : backgroundMediaState.fileBlob;
         updateExportFileSize(existingGroup?.querySelector('.file-action-size'), blob.size);
         continue;
       }
@@ -1521,7 +1886,7 @@ SOFTWARE.
       const deleteButton = document.createElement('button');
       deleteButton.type = 'button'; deleteButton.className = 'action-btn file-delete-btn';
       deleteButton.id = `${definition.id}-delete`; deleteButton.dataset.deleteType = definition.id.replace('btn-download-', '');
-      deleteButton.title = `${definition.label}の実行時データを削除`;
+      deleteButton.title = translate('file.delete', { label: definition.label });
       deleteButton.setAttribute('aria-label', deleteButton.title);
       const deleteIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       deleteIcon.setAttribute('class', 'action-btn-icon'); deleteIcon.setAttribute('viewBox', '0 0 24 24'); deleteIcon.setAttribute('aria-hidden', 'true');
@@ -1533,8 +1898,8 @@ SOFTWARE.
       const size = document.createElement('span');
       size.className = 'file-action-size';
       size.dataset.exportSizeFor = definition.id;
-      size.setAttribute('aria-label', `${definition.label}ファイルのサイズ`);
-      updateExportFileSize(size, definition.id === 'btn-download-text' ? importedTextFileBlob.size : backgroundMediaFileBlob.size);
+      size.setAttribute('aria-label', translate('file.size', { label: definition.label }));
+      updateExportFileSize(size, definition.id === 'btn-download-text' ? importedTextFileBlob.size : backgroundMediaState.fileBlob.size);
       group.append(label, size, deleteButton, button);
       loadedFileDownloads.appendChild(group);
     }
@@ -1566,12 +1931,26 @@ SOFTWARE.
     return btoa(binary);
   }
 
+  function serializeEmbeddedJson(value, space = 0) {
+    return JSON.stringify(value, null, space).replace(/[<>&\u2028\u2029]/g, character =>
+      `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`
+    );
+  }
+
+  function isValidBase64String(value) {
+    return typeof value === 'string' &&
+      /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value);
+  }
+
   function dataUrlToBlob(dataUrl) {
     const comma = dataUrl.indexOf(',');
     if (comma < 0) throw new Error('埋め込みメディアの形式が不正です。');
     const header = dataUrl.slice(0, comma);
-    const mime = (header.match(/^data:([^;]+)/i) || [])[1] || 'application/octet-stream';
-    const binary = atob(dataUrl.slice(comma + 1));
+    const headerMatch = header.match(/^data:([^;,]+);base64$/i);
+    const encoded = dataUrl.slice(comma + 1);
+    if (!headerMatch) throw new Error('埋め込みメディアの形式が不正です。');
+    const mime = headerMatch[1];
+    const binary = atob(encoded);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     return new Blob([bytes], { type: mime });
@@ -1602,7 +1981,7 @@ SOFTWARE.
   }
 
   function updateBackgroundPosition() {
-    if (!backgroundMediaDataUrl) {
+    if (!backgroundMediaState.dataUrl) {
       document.documentElement.style.setProperty('--bg-pos-x', 'calc(50% + 0px)');
       document.documentElement.style.setProperty('--bg-pos-y', 'calc(50% + 0px)');
       return;
@@ -1610,9 +1989,9 @@ SOFTWARE.
 
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    if (viewportWidth === 0 || viewportHeight === 0 || backgroundMediaNaturalWidth === 0 || backgroundMediaNaturalHeight === 0) return;
+    if (viewportWidth === 0 || viewportHeight === 0 || backgroundMediaState.naturalWidth === 0 || backgroundMediaState.naturalHeight === 0) return;
 
-    const mediaAspectRatio = backgroundMediaNaturalWidth / backgroundMediaNaturalHeight;
+    const mediaAspectRatio = backgroundMediaState.naturalWidth / backgroundMediaState.naturalHeight;
     const viewportAspectRatio = viewportWidth / viewportHeight;
 
     let renderedMediaWidth, renderedMediaHeight;
@@ -1627,18 +2006,18 @@ SOFTWARE.
     const maximumMediaOffsetX = Math.max(0, (renderedMediaWidth - viewportWidth) / 2);
     const maximumMediaOffsetY = Math.max(0, (renderedMediaHeight - viewportHeight) / 2);
 
-    backgroundMediaOffsetX = Math.max(-maximumMediaOffsetX, Math.min(maximumMediaOffsetX, backgroundMediaOffsetX));
-    backgroundMediaOffsetY = Math.max(-maximumMediaOffsetY, Math.min(maximumMediaOffsetY, backgroundMediaOffsetY));
+    backgroundMediaState.offsetX = Math.max(-maximumMediaOffsetX, Math.min(maximumMediaOffsetX, backgroundMediaState.offsetX));
+    backgroundMediaState.offsetY = Math.max(-maximumMediaOffsetY, Math.min(maximumMediaOffsetY, backgroundMediaState.offsetY));
 
-    document.documentElement.style.setProperty('--bg-pos-x', `calc(50% + ${backgroundMediaOffsetX}px)`);
-    document.documentElement.style.setProperty('--bg-pos-y', `calc(50% + ${backgroundMediaOffsetY}px)`);
-    if (backgroundMediaType === 'video') {
+    document.documentElement.style.setProperty('--bg-pos-x', `calc(50% + ${backgroundMediaState.offsetX}px)`);
+    document.documentElement.style.setProperty('--bg-pos-y', `calc(50% + ${backgroundMediaState.offsetY}px)`);
+    if (backgroundMediaState.mediaType === 'video') {
 
       backgroundVideo.style.inset = 'auto';
       backgroundVideo.style.width = `${renderedMediaWidth}px`;
       backgroundVideo.style.height = `${renderedMediaHeight}px`;
-      backgroundVideo.style.left = `calc(50% - ${renderedMediaWidth / 2}px + ${backgroundMediaOffsetX}px)`;
-      backgroundVideo.style.top = `calc(50% - ${renderedMediaHeight / 2}px + ${backgroundMediaOffsetY}px)`;
+      backgroundVideo.style.left = `calc(50% - ${renderedMediaWidth / 2}px + ${backgroundMediaState.offsetX}px)`;
+      backgroundVideo.style.top = `calc(50% - ${renderedMediaHeight / 2}px + ${backgroundMediaState.offsetY}px)`;
       backgroundVideo.style.transform = 'none';
       backgroundVideo.style.objectFit = 'fill';
     }
@@ -1648,15 +2027,15 @@ SOFTWARE.
   const bgViewportIndicator = document.getElementById('bg-viewport-indicator');
   const bgViewportMap = document.getElementById('bg-viewport-map');
   function updateBackgroundViewportIndicator() {
-    if (!backgroundMediaDataUrl || !backgroundMediaNaturalWidth || !backgroundMediaNaturalHeight) return;
+    if (!backgroundMediaState.dataUrl || !backgroundMediaState.naturalWidth || !backgroundMediaState.naturalHeight) return;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const ratio = backgroundMediaNaturalWidth / backgroundMediaNaturalHeight;
+    const ratio = backgroundMediaState.naturalWidth / backgroundMediaState.naturalHeight;
     let renderedMediaWidth, renderedMediaHeight;
     if (vw / vh > ratio) { renderedMediaWidth = vw; renderedMediaHeight = vw / ratio; }
     else { renderedMediaHeight = vh; renderedMediaWidth = vh * ratio; }
-    const left = (vw - renderedMediaWidth) / 2 + backgroundMediaOffsetX;
-    const top = (vh - renderedMediaHeight) / 2 + backgroundMediaOffsetY;
+    const left = (vw - renderedMediaWidth) / 2 + backgroundMediaState.offsetX;
+    const top = (vh - renderedMediaHeight) / 2 + backgroundMediaState.offsetY;
     const x1 = Math.max(0, Math.min(1, -left / renderedMediaWidth));
     const y1 = Math.max(0, Math.min(1, -top / renderedMediaHeight));
     const x2 = Math.max(0, Math.min(1, (vw - left) / renderedMediaWidth));
@@ -1674,22 +2053,39 @@ SOFTWARE.
   function isAllowedResourceUrl(value, kind) {
     const normalized = String(value || '').trim();
     if (kind === 'href') return /^(https?:\/\/|#|(?:\.\.\/|\.\/|[A-Za-z0-9_-]+\/))[^\s]*$/i.test(normalized);
-    if (kind === 'image') return /^(data:image\/(?:png|jpe?g|gif|webp|bmp|svg\+xml);|https?:\/\/|\.\/|\.\.\/)/i.test(normalized);
+    if (kind === 'image') return /^data:image\/(?:png|jpe?g|gif|webp|bmp|svg\+xml);/i.test(normalized);
     return false;
   }
 
   function isEmbeddableMediaDataUrl(value, mediaType) {
-    return typeof value === 'string' && value.startsWith(`data:${mediaType}/`);
+    if (mediaType !== 'image' && mediaType !== 'video') return false;
+    const match = typeof value === 'string'
+      ? value.match(/^data:(image|video)\/([a-z0-9.+-]+);base64,((?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)$/i)
+      : null;
+    return Boolean(match && match[1].toLowerCase() === mediaType);
   }
 
   function createEmbeddedDownloadData(textBase64, textExtension, textMimeType, mediaDataUrl, mediaType, mediaExtension) {
     const mediaIncluded = (mediaType === 'image' || mediaType === 'video') && isEmbeddableMediaDataUrl(mediaDataUrl, mediaType);
-    return { textBase64: textBase64 || '', textExtension: textExtension || '', textMimeType: textMimeType || '', mediaIncluded, mediaType: mediaIncluded ? mediaType : null, mediaExtension: mediaIncluded ? (mediaExtension || '') : '', mediaDataUrl: mediaIncluded ? mediaDataUrl : '' };
+    return {
+      schemaVersion: EMBEDDED_DATA_SCHEMA_VERSION,
+      textBase64: textBase64 || '',
+      textExtension: textExtension || '',
+      textMimeType: textMimeType || '',
+      mediaIncluded,
+      mediaType: mediaIncluded ? mediaType : null,
+      mediaExtension: mediaIncluded ? (mediaExtension || '') : '',
+      mediaDataUrl: mediaIncluded ? mediaDataUrl : ''
+    };
+  }
+
+  function createEmbeddedResetDefaults(settings, content) {
+    return { schemaVersion: EMBEDDED_DATA_SCHEMA_VERSION, settings, content };
   }
 
   function reportOperationFailure(label, error) {
     console.error(`${label}に失敗しました:`, error);
-    showErrorNotice(`${label}に失敗しました。操作をやり直してください。問題が続く場合は、ブラウザーの開発者コンソールで詳細を確認できます。`);
+    showErrorNotice(translate('error.operation', { label }));
   }
 
   function isAllowedSanitizedAttribute(tagName, attributeName, value) {
@@ -1704,8 +2100,9 @@ SOFTWARE.
   }
 
   function sanitizeHTML(dirtyHtml) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(dirtyHtml, 'text/html');
+    const template = document.createElement('template');
+    template.innerHTML = dirtyHtml || '';
+    const fragment = template.content;
     const ALLOWED_TAGS = new Set([
       'P', 'BR', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
       'RUBY', 'RT', 'RP', 'EM', 'STRONG', 'DEL', 'SPAN', 'DIV', 'IMG', 'HR',
@@ -1718,8 +2115,7 @@ SOFTWARE.
       for (const child of children) {
         if (child.nodeType === Node.ELEMENT_NODE) {
           if (!ALLOWED_TAGS.has(child.tagName)) {
-            const textNode = document.createTextNode(child.textContent || '');
-            node.replaceChild(textNode, child);
+            node.removeChild(child);
             continue;
           }
 
@@ -1746,8 +2142,8 @@ SOFTWARE.
       }
     }
 
-    cleanNode(doc.body);
-    return doc.body.innerHTML;
+    cleanNode(fragment);
+    return template.innerHTML;
   }
 
   function processPunctuation(text) {
@@ -1901,16 +2297,16 @@ SOFTWARE.
   }
 
   function applyBackgroundImage(dataUrl, restoreSavedPosition = false, mediaType = 'image', onLoadError) {
-    const previousObjectUrl = backgroundMediaObjectUrl;
-    backgroundMediaDataUrl = dataUrl || null;
-    backgroundMediaObjectUrl = typeof dataUrl === 'string' && dataUrl.startsWith('blob:') ? dataUrl : null;
-    backgroundMediaType = dataUrl ? mediaType : null;
-    lastLoadedImageElement = null;
-    backgroundMediaNaturalWidth = 0;
-    backgroundMediaNaturalHeight = 0;
-    backgroundMediaOffsetX = 0;
-    backgroundMediaOffsetY = 0;
-    if (previousObjectUrl && previousObjectUrl !== backgroundMediaObjectUrl) {
+    const previousObjectUrl = backgroundMediaState.objectUrl;
+    backgroundMediaState.dataUrl = dataUrl || null;
+    backgroundMediaState.objectUrl = typeof dataUrl === 'string' && dataUrl.startsWith('blob:') ? dataUrl : null;
+    backgroundMediaState.mediaType = dataUrl ? mediaType : null;
+    backgroundMediaState.lastLoadedImage = null;
+    backgroundMediaState.naturalWidth = 0;
+    backgroundMediaState.naturalHeight = 0;
+    backgroundMediaState.offsetX = 0;
+    backgroundMediaState.offsetY = 0;
+    if (previousObjectUrl && previousObjectUrl !== backgroundMediaState.objectUrl) {
       URL.revokeObjectURL(previousObjectUrl);
     }
     backgroundVideo.pause();
@@ -1930,7 +2326,7 @@ SOFTWARE.
     }
 
     document.body.classList.add('has-bg');
-    const isCurrentMedia = () => backgroundMediaType === mediaType && backgroundMediaDataUrl === dataUrl;
+    const isCurrentMedia = () => backgroundMediaState.mediaType === mediaType && backgroundMediaState.dataUrl === dataUrl;
     const reportLoadError = () => {
       if (!isCurrentMedia()) return;
       const error = new Error('背景メディアを読み込めませんでした。');
@@ -1948,20 +2344,20 @@ SOFTWARE.
           if (error?.name !== 'NotAllowedError' || autoplayRejectionReported ||
               backgroundVideo.onloadedmetadata !== onVideoReady || !backgroundVideo.paused) return;
           autoplayRejectionReported = true;
-          showErrorNotice('ブラウザーが背景動画の自動再生を拒否しました。');
+          showErrorNotice(translate('error.videoAutoplay'));
         });
       };
       const onVideoReady = () => {
         const videoWidth = backgroundVideo.videoWidth;
         const videoHeight = backgroundVideo.videoHeight;
         if (!videoWidth || !videoHeight) return;
-        backgroundMediaNaturalWidth = videoWidth;
-        backgroundMediaNaturalHeight = videoHeight;
+        backgroundMediaState.naturalWidth = videoWidth;
+        backgroundMediaState.naturalHeight = videoHeight;
         if (restoreSavedPosition) {
           try {
             const savedPosition = JSON.parse(localStorage.getItem(getPositionStorageKey()) || '{}');
-            if (Number.isFinite(savedPosition.bgOffsetX)) backgroundMediaOffsetX = savedPosition.bgOffsetX;
-            if (Number.isFinite(savedPosition.bgOffsetY)) backgroundMediaOffsetY = savedPosition.bgOffsetY;
+            if (Number.isFinite(savedPosition.bgOffsetX)) backgroundMediaState.offsetX = Math.max(-window.innerWidth, Math.min(window.innerWidth, savedPosition.bgOffsetX));
+            if (Number.isFinite(savedPosition.bgOffsetY)) backgroundMediaState.offsetY = Math.max(-window.innerHeight, Math.min(window.innerHeight, savedPosition.bgOffsetY));
           } catch (_) {}
         }
         updateBackgroundPosition();
@@ -1990,16 +2386,16 @@ SOFTWARE.
     const img = new Image();
     img.onload = () => {
       if (!isCurrentMedia()) return;
-      backgroundMediaNaturalWidth = img.naturalWidth;
-      backgroundMediaNaturalHeight = img.naturalHeight;
+      backgroundMediaState.naturalWidth = img.naturalWidth;
+      backgroundMediaState.naturalHeight = img.naturalHeight;
       if (restoreSavedPosition) {
         try {
             const savedPosition = JSON.parse(localStorage.getItem(getPositionStorageKey()) || '{}');
-          if (Number.isFinite(savedPosition.bgOffsetX)) backgroundMediaOffsetX = savedPosition.bgOffsetX;
-          if (Number.isFinite(savedPosition.bgOffsetY)) backgroundMediaOffsetY = savedPosition.bgOffsetY;
+          if (Number.isFinite(savedPosition.bgOffsetX)) backgroundMediaState.offsetX = Math.max(-window.innerWidth, Math.min(window.innerWidth, savedPosition.bgOffsetX));
+          if (Number.isFinite(savedPosition.bgOffsetY)) backgroundMediaState.offsetY = Math.max(-window.innerHeight, Math.min(window.innerHeight, savedPosition.bgOffsetY));
         } catch (_) {}
       }
-      lastLoadedImageElement = img;
+      backgroundMediaState.lastLoadedImage = img;
       analyzeImageAndComputeAuto(img);
       applySettings(activeViewerSettings);
       saveSettings();
@@ -2018,7 +2414,7 @@ SOFTWARE.
     const root = document.documentElement;
     root.setAttribute('data-writing-mode', settings.writingMode);
     root.setAttribute('data-theme', settings.theme);
-    if (!backgroundMediaDataUrl) {
+    if (!backgroundMediaState.dataUrl) {
       setBackgroundImageStyle(`url('${DEFAULT_BACKGROUND_IMAGES[settings.theme] || DEFAULT_BACKGROUND_IMAGES.light}')`);
     }
 
@@ -2028,7 +2424,7 @@ SOFTWARE.
     themeIcon.innerHTML = settings.theme === 'dark'
       ? '<circle cx="12" cy="12" r="4" /><path d="M12 1.75v2.5m0 15.5v2.5M1.75 12h2.5m15.5 0h2.5M4.76 4.76l1.77 1.77m10.94 10.94 1.77 1.77M19.24 4.76l-1.77 1.77M6.53 17.47l-1.77 1.77" />'
       : '<path d="M20.2 15.4A8.5 8.5 0 0 1 8.6 3.8 8.8 8.8 0 1 0 20.2 15.4Z" />';
-    btnThemeToggle.title = settings.theme === 'dark' ? 'ライトテーマに切り替え' : 'ダークテーマに切り替え';
+    btnThemeToggle.title = translate(settings.theme === 'dark' ? 'theme.light' : 'theme.dark');
 
     root.style.setProperty(
       '--reader-font',
@@ -2043,11 +2439,9 @@ SOFTWARE.
     root.style.setProperty('--content-padding', `${settings.contentPadding}px`);
     root.style.setProperty('--background-blur', `${settings.backgroundBlur}px`);
 
-    const canAutoSyncColors = Boolean(backgroundMediaDataUrl && backgroundMediaType === 'image' && backgroundMediaNaturalWidth && backgroundMediaNaturalHeight);
+    const canAutoSyncColors = Boolean(backgroundMediaState.dataUrl && backgroundMediaState.mediaType === 'image' && backgroundMediaState.naturalWidth && backgroundMediaState.naturalHeight);
     automaticColorSyncControl.disabled = !canAutoSyncColors;
-    automaticColorSyncControl.title = canAutoSyncColors
-      ? '背景画像の平均色から本文色を自動設定'
-      : '背景画像を読み込むと使用できます';
+    automaticColorSyncControl.title = translate(canAutoSyncColors ? 'color.autoAvailable' : 'color.autoUnavailable');
     const effectiveAutoSync = Boolean(settings.autoSync && canAutoSyncColors);
     const effectiveBg = settings.bgColor;
     const effectiveNarration = effectiveAutoSync ? themeDerivedColors.narrationColor : settings.narrationColor;
@@ -2102,29 +2496,121 @@ SOFTWARE.
     });
   }
 
-  function saveSettings() {
+  function saveSettings(settings = activeViewerSettings) {
+    if (settingsPersistence.conflicted) return false;
+    settingsPersistence.pending = JSON.stringify(settings);
+    setSettingsSaveStatus('saving');
+    clearTimeout(settingsPersistence.timer);
+    settingsPersistence.timer = setTimeout(flushSettingsSave, 250);
+    return true;
+  }
+
+  const settingsPersistence = { timer: 0, pending: null, inFlight: false, generation: 0, conflicted: false };
+  function setSettingsSaveStatus(state) {
+    if (typeof settingsSaveStatusEl === 'undefined' || !settingsSaveStatusEl) return;
+    settingsSaveStatusEl.textContent = state ? translate(`settings.save.${state}`) : '';
+    settingsSaveStatusEl.dataset.state = state || '';
+  }
+
+  async function flushSettingsSave() {
+    if (settingsPersistence.inFlight || settingsPersistence.pending === null || settingsPersistence.conflicted) return;
+    const serialized = settingsPersistence.pending;
+    const generation = settingsPersistence.generation;
+    settingsPersistence.pending = null;
+    settingsPersistence.inFlight = true;
     try {
-      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(activeViewerSettings));
-      confirmLocalStorageWrite(STORAGE_KEYS.SETTINGS);
+      const persist = () => {
+        if (settingsPersistence.conflicted || generation !== settingsPersistence.generation) return;
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, serialized);
+        confirmLocalStorageWrite(STORAGE_KEYS.SETTINGS);
+      };
+      if (typeof navigator !== 'undefined' && navigator.locks && typeof navigator.locks.request === 'function') {
+        await navigator.locks.request(SAVED_DATA_LOCK_NAME, { mode: 'exclusive' }, persist);
+      } else persist();
+      scheduleHtmlExportSizeUpdate();
+      if (generation === settingsPersistence.generation && !settingsPersistence.conflicted) setSettingsSaveStatus('saved');
     } catch (error) {
       reportLocalStorageWrite(STORAGE_KEYS.SETTINGS, error);
+      setSettingsSaveStatus('failed');
+    } finally {
+      settingsPersistence.inFlight = false;
+      if (settingsPersistence.pending !== null) settingsPersistence.timer = setTimeout(flushSettingsSave, 0);
     }
-    scheduleHtmlExportSizeUpdate();
+  }
+
+  function flushPendingSettingsSynchronously() {
+    if (settingsPersistence.pending === null || settingsPersistence.conflicted) return;
+    clearTimeout(settingsPersistence.timer);
+    const serialized = settingsPersistence.pending;
+    settingsPersistence.pending = null;
+    try {
+      localStorage.setItem(STORAGE_KEYS.SETTINGS, serialized);
+      confirmLocalStorageWrite(STORAGE_KEYS.SETTINGS);
+      setSettingsSaveStatus('saved');
+    } catch (error) {
+      reportLocalStorageWrite(STORAGE_KEYS.SETTINGS, error);
+      setSettingsSaveStatus('failed');
+    }
+  }
+  window.addEventListener('pagehide', flushPendingSettingsSynchronously);
+
+  function handleExternalSavedDataChange(event) {
+    if (event.key !== null && event.key !== undefined &&
+        ![STORAGE_KEYS.SETTINGS, STORAGE_KEYS.CONTENT, SAVED_DATA_JOURNAL_KEY, SAVED_DATA_REVISION_KEY].includes(event.key) &&
+        !event.key.startsWith(`${STORAGE_KEYS.BOOKMARKS}:`)) return;
+    settingsPersistence.generation += 1;
+    settingsPersistence.conflicted = true;
+    settingsPersistence.pending = null;
+    clearTimeout(settingsPersistence.timer);
+    setSettingsSaveStatus('conflict');
+    showErrorNotice(translate('settings.save.conflict'));
+  }
+  window.addEventListener('storage', handleExternalSavedDataChange);
+
+  function commitSettings(changes, {
+    replace = false,
+    persist = true,
+    render = true,
+    preserveReadingPosition = true,
+    refreshReadingState = true
+  } = {}) {
+    if (settingsPersistence.conflicted) {
+      setSettingsSaveStatus('conflict');
+      return activeViewerSettings;
+    }
+    const nextSettings = replace ? { ...changes } : { ...activeViewerSettings, ...changes };
+    const positionBeforeWritingModeChange = preserveReadingPosition &&
+      nextSettings.writingMode !== activeViewerSettings.writingMode
+      ? captureReadingPosition()
+      : null;
+    if (persist && !saveSettings(nextSettings)) {
+      if (render) applySettings(activeViewerSettings);
+      return activeViewerSettings;
+    }
+    const themeChanged = nextSettings.theme !== activeViewerSettings.theme;
+    for (const key of Object.keys(activeViewerSettings)) delete activeViewerSettings[key];
+    Object.assign(activeViewerSettings, nextSettings);
+    if (themeChanged) {
+      themeDerivedColors = { ...THEME_PALETTES[nextSettings.theme] || THEME_PALETTES.light };
+    }
+    if (nextSettings.autoSync && typeof backgroundMediaState.lastLoadedImage !== 'undefined' && backgroundMediaState.lastLoadedImage &&
+        (themeChanged || changes.autoSync === true)) {
+      analyzeImageAndComputeAuto(backgroundMediaState.lastLoadedImage);
+    }
+    if (render) applySettings(activeViewerSettings);
+    if (positionBeforeWritingModeChange) restoreReadingPosition(positionBeforeWritingModeChange);
+    if (refreshReadingState) {
+      updateReadingState();
+      requestAnimationFrame(() => {
+        updateReadingState();
+        executeSavePosition();
+      });
+    }
+    return activeViewerSettings;
   }
 
   function updateSetting(key, value) {
-    const positionBeforeWritingModeChange = key === 'writingMode' && value !== activeViewerSettings.writingMode
-      ? captureReadingPosition()
-      : null;
-    activeViewerSettings[key] = value;
-    applySettings(activeViewerSettings);
-    if (positionBeforeWritingModeChange) restoreReadingPosition(positionBeforeWritingModeChange);
-    saveSettings();
-    updateReadingState();
-    requestAnimationFrame(() => {
-      updateReadingState();
-      executeSavePosition();
-    });
+    return commitSettings({ [key]: value });
   }
 
   btnThemeToggle.addEventListener('click', () => {
@@ -2134,21 +2620,18 @@ SOFTWARE.
 
     // Theme defaults are migrated together. Values customized by the user are
     // retained, while values still matching the old palette follow the new one.
+    const changes = { theme: nextTheme };
     for (const key of paletteKeys) {
       const previousDefault = THEME_PALETTES[previousTheme][key];
       const nextDefault = THEME_PALETTES[nextTheme][key];
       const currentValue = activeViewerSettings[key];
       if (typeof currentValue === 'string' &&
           currentValue.toLowerCase() === previousDefault.toLowerCase()) {
-        activeViewerSettings[key] = nextDefault;
+        changes[key] = nextDefault;
       }
     }
 
-    themeDerivedColors = { ...THEME_PALETTES[nextTheme] };
-    if (activeViewerSettings.autoSync && lastLoadedImageElement) {
-      analyzeImageAndComputeAuto(lastLoadedImageElement);
-    }
-    updateSetting('theme', nextTheme);
+    commitSettings(changes);
   });
   btnOpenHelp.addEventListener('click', () => shortcutModal.showModal());
   btnCloseHelp.addEventListener('click', () => shortcutModal.close());
@@ -2196,9 +2679,6 @@ SOFTWARE.
   });
 
   automaticColorSyncControl.addEventListener('change', () => {
-    if (automaticColorSyncControl.checked && lastLoadedImageElement) {
-      analyzeImageAndComputeAuto(lastLoadedImageElement);
-    }
     updateSetting('autoSync', automaticColorSyncControl.checked);
   });
 
@@ -2208,6 +2688,54 @@ SOFTWARE.
   wakeLockControl.addEventListener('change', () => {
     updateSetting('wakeLock', wakeLockControl.checked);
   });
+  function normalizeSearchText(value, ignoreVariants = false) {
+    const source = String(value ?? '');
+    let normalized = '';
+    const starts = [];
+    const ends = [];
+    const segments = typeof Intl.Segmenter === 'function'
+      ? Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(source), item => ({ text: item.segment, index: item.index }))
+      : Array.from(source.matchAll(/\P{M}\p{M}*|\p{M}+/gu), match => ({ text: match[0], index: match.index }));
+    for (const segment of segments) {
+      const transformed = ignoreVariants ? segment.text.normalize('NFKC').toLowerCase() : segment.text;
+      normalized += transformed;
+      for (let index = 0; index < transformed.length; index++) {
+        starts.push(segment.index);
+        ends.push(segment.index + segment.text.length);
+      }
+    }
+    return { text: normalized, starts, ends };
+  }
+
+  function findTextMatches(text, query, ignoreVariants = false) {
+    if (!query) return [];
+    const source = normalizeSearchText(text, ignoreVariants);
+    const needle = normalizeSearchText(query, ignoreVariants).text;
+    if (!needle) return [];
+    const matches = [];
+    let offset = 0;
+    while (offset <= source.text.length - needle.length) {
+      const found = source.text.indexOf(needle, offset);
+      if (found === -1) break;
+      matches.push({ start: source.starts[found], end: source.ends[found + needle.length - 1] });
+      offset = found + needle.length;
+    }
+    return matches;
+  }
+
+  function collectSearchTextBlocks() {
+    const selector = 'h1, h2, h3, h4, h5, h6, p, li, td, th, pre';
+    const elements = Array.from(novelContentElement.querySelectorAll(selector))
+      .filter(element => !element.querySelector(selector));
+    let headingText = '本文';
+    return elements.flatMap(element => {
+      const text = element.textContent.trim();
+      if (!text) return [];
+      const isHeading = /^H[1-6]$/.test(element.tagName);
+      if (isHeading) headingText = text;
+      return [{ element, text, kind: isHeading ? 'heading' : 'body', headingText }];
+    });
+  }
 
   function collectTableOfContentsEntries() {
     const headingEls = Array.from(novelContentElement.querySelectorAll('h1, h2, h3, h4, h5, h6'));
@@ -2221,20 +2749,45 @@ SOFTWARE.
         element: el
       };
     });
-    renderTableOfContents();
+    return tableOfContentsEntries;
   }
 
+  function renderNavigationViews({ toc = true, bookmarks = true, search = true } = {}) {
+    if (toc) renderTableOfContents();
+    if (bookmarks && typeof bookmarkListEl !== 'undefined') renderBookmarks();
+    if (search && typeof searchQueryInput !== 'undefined') renderSearchResults();
+  }
+
+  function refreshDocumentNavigation() {
+    const startedAt = Date.now();
+    collectTableOfContentsEntries();
+    renderNavigationViews();
+    reportNavigationDuration('navigation indexing', startedAt);
+  }
+
+  function displayViewerContent(content, { alreadySanitized = false } = {}) {
+    if (typeof content === 'string') {
+      novelContentElement.innerHTML = alreadySanitized ? content : sanitizeHTML(content);
+    }
+    refreshDocumentNavigation();
+    updateReadingState();
+  }
+
+  let tocRenderGeneration = 0;
   function renderTableOfContents() {
-    tocListEl.innerHTML = '';
+    const startedAt = Date.now();
+    const generation = ++tocRenderGeneration;
     if (tableOfContentsEntries.length === 0) {
+      tocListEl.innerHTML = '';
       const empty = document.createElement('li');
       empty.className = 'toc-empty';
-      empty.textContent = '見出しが見つかりませんでした';
+      empty.textContent = translate('error.noHeadings');
       tocListEl.appendChild(empty);
       return;
     }
 
-    tableOfContentsEntries.forEach(item => {
+    const entries = tableOfContentsEntries.slice();
+    const appendItem = item => {
       const li = document.createElement('li');
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -2251,7 +2804,277 @@ SOFTWARE.
       });
       li.appendChild(btn);
       tocListEl.appendChild(li);
+    };
+    if (entries.length > 300) {
+      tocListEl.innerHTML = '';
+      (async () => {
+        for (let offset = 0; offset < entries.length; offset += 150) {
+          if (generation !== tocRenderGeneration) return;
+          entries.slice(offset, offset + 150).forEach(appendItem);
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+        reportNavigationDuration('contents rendering', startedAt);
+      })();
+    } else {
+      tocListEl.innerHTML = '';
+      entries.forEach(appendItem);
+      reportNavigationDuration('contents rendering', startedAt);
+    }
+  }
+
+  function readBookmarks() {
+    const raw = localStorage.getItem(getBookmarksStorageKey());
+    if (!raw) return [];
+    const value = JSON.parse(raw);
+    if (!Array.isArray(value)) throw new Error('保存したしおりの形式が正しくありません。');
+    return value.filter(item => item && typeof item.id === 'string' && item.id.length <= 128 &&
+      typeof item.name === 'string' && item.name.length <= 80 && item.position &&
+      typeof item.position === 'object' && !Array.isArray(item.position));
+  }
+
+  function renderBookmarks() {
+    bookmarkListEl.replaceChildren();
+    let bookmarks;
+    try { bookmarks = readBookmarks(); }
+    catch (error) {
+      console.warn(translate('bookmark.loadFailed'), error);
+      bookmarks = [];
+    }
+    if (!bookmarks.length) {
+      const empty = document.createElement('li');
+      empty.className = 'bookmark-empty';
+      empty.textContent = translate('error.noBookmarks');
+      bookmarkListEl.appendChild(empty);
+      return;
+    }
+    bookmarks.forEach(bookmark => {
+      const item = document.createElement('li');
+      item.className = 'bookmark-item';
+      const jump = document.createElement('button');
+      jump.type = 'button';
+      jump.className = 'bookmark-jump';
+      jump.textContent = bookmark.name;
+      jump.setAttribute('aria-label', translate('bookmark.jump', { name: bookmark.name }));
+      jump.addEventListener('click', () => {
+        restoreReadingPosition(bookmark.position);
+        closeAllDrawers();
+      });
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'bookmark-delete';
+      remove.setAttribute('aria-label', translate('bookmark.delete', { name: bookmark.name }));
+      remove.title = translate('bookmark.deleteTitle');
+      const deleteIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      deleteIcon.setAttribute('viewBox', '0 0 24 24');
+      deleteIcon.setAttribute('aria-hidden', 'true');
+      const deletePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      deletePath.setAttribute('d', 'M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3');
+      deleteIcon.appendChild(deletePath);
+      remove.appendChild(deleteIcon);
+      remove.addEventListener('click', () => runBookmarkMutation(() => removeBookmark(bookmark.id), getBookmarksStorageKey()));
+      item.append(jump, remove);
+      bookmarkListEl.appendChild(item);
     });
+  }
+
+  function removeBookmark(bookmarkId) {
+    if (settingsPersistence.conflicted) return false;
+    const key = getBookmarksStorageKey();
+    try {
+      const next = readBookmarks().filter(bookmark => bookmark.id !== bookmarkId);
+      localStorage.setItem(key, JSON.stringify(next));
+      confirmLocalStorageWrite(key);
+      renderBookmarks();
+      return true;
+    } catch (error) {
+      reportLocalStorageWrite(key, error);
+      return false;
+    }
+  }
+
+  const bookmarkDependencies = {
+    now: () => Date.now(),
+    random: () => Math.random(),
+    formatTimestamp: () => new Date().toLocaleString()
+  };
+
+  function runBookmarkMutation(operation, storageKey) {
+    return withSavedDataLock(() => settingsPersistence.conflicted ? false : operation())
+      .catch(error => { reportLocalStorageWrite(storageKey, error); return false; });
+  }
+
+  function addBookmark(name = '', position = null, dependencies = bookmarkDependencies) {
+    if (settingsPersistence.conflicted) return false;
+    const key = getBookmarksStorageKey();
+    const cleanName = String(name).trim().slice(0, 80) || translate('bookmark.defaultName', { time: dependencies.formatTimestamp() });
+    let bookmarks;
+    try { bookmarks = readBookmarks(); }
+    catch (error) {
+      reportLocalStorageWrite(key, error);
+      return false;
+    }
+    const bookmark = {
+      id: `${dependencies.now()}-${dependencies.random().toString(36).slice(2)}`,
+      name: cleanName,
+      position: position || captureReadingPosition()
+    };
+    try {
+      localStorage.setItem(key, JSON.stringify([...bookmarks, bookmark]));
+      confirmLocalStorageWrite(key);
+      bookmarkNameInput.value = '';
+      renderBookmarks();
+      return true;
+    } catch (error) {
+      reportLocalStorageWrite(key, error);
+      return false;
+    }
+  }
+
+  function initializeBookmarkControls() {
+    btnAddBookmark.addEventListener('click', () => runBookmarkMutation(
+      () => addBookmark(bookmarkNameInput.value), getBookmarksStorageKey()
+    ));
+  }
+
+  function setSearchResultStatus(text) {
+    searchResultStatus.textContent = text;
+  }
+
+  let searchRenderGeneration = 0;
+  function reportNavigationDuration(operation, startedAt) {
+    const elapsed = Date.now() - startedAt;
+    if (elapsed >= 100 && typeof console !== 'undefined' && typeof console.debug === 'function') {
+      console.debug(`[Hitohira] ${operation}: ${elapsed} ms`);
+    }
+  }
+
+  function clearActiveSearchBlock() {
+    if (activeSearchElement) activeSearchElement.classList.remove('search-current-block');
+    activeSearchElement = null;
+  }
+
+  function renderSearchResults() {
+    const startedAt = Date.now();
+    const generation = ++searchRenderGeneration;
+    clearActiveSearchBlock();
+    activeSearchResultIndex = -1;
+    searchResults = [];
+    searchResultsTruncated = false;
+    searchResultList.replaceChildren();
+    btnSearchPrevious.disabled = true;
+    btnSearchNext.disabled = true;
+    const query = searchQueryInput.value.trim();
+    if (!query) {
+      setSearchResultStatus('');
+      return;
+    }
+    const includeHeadings = searchIncludeHeadings.checked;
+    const includeBody = searchIncludeBody.checked;
+    if (!includeHeadings && !includeBody) {
+      setSearchResultStatus(translate('error.chooseTarget'));
+      return;
+    }
+    const ignoreVariants = !searchDistinguishVariants.checked;
+    const blocks = collectSearchTextBlocks();
+    const results = [];
+    let truncated = false;
+    const scan = (start, end) => {
+      for (let blockIndex = start; blockIndex < end; blockIndex += 1) {
+        const block = blocks[blockIndex];
+        if (block.kind === 'heading' ? !includeHeadings : !includeBody) continue;
+        const matches = findTextMatches(block.text, query, ignoreVariants);
+        for (const match of matches) {
+          if (results.length >= maxSearchResults) { truncated = true; return false; }
+          results.push({ ...block, ...match });
+        }
+      }
+      return true;
+    };
+    const render = () => {
+      if (generation !== searchRenderGeneration) return;
+      searchResults = results;
+      searchResultsTruncated = truncated;
+      const fragment = document.createDocumentFragment();
+      searchResults.forEach((result, index) => {
+        const item = document.createElement('li');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'search-result-button';
+        button.dataset.searchResultIndex = String(index);
+        button.dataset.searchKind = result.kind;
+        const heading = document.createElement('span');
+        heading.className = 'search-result-heading';
+        heading.textContent = result.headingText || translate('search.body');
+        const snippet = document.createElement('span');
+        snippet.className = 'search-result-snippet';
+        const snippetStart = Math.max(0, result.start - 28);
+        const snippetEnd = Math.min(result.text.length, result.end + 44);
+        if (snippetStart > 0) snippet.appendChild(document.createTextNode('…'));
+        snippet.appendChild(document.createTextNode(result.text.slice(snippetStart, result.start)));
+        const match = document.createElement('mark');
+        match.textContent = result.text.slice(result.start, result.end);
+        snippet.appendChild(match);
+        snippet.appendChild(document.createTextNode(result.text.slice(result.end, snippetEnd)));
+        if (snippetEnd < result.text.length) snippet.appendChild(document.createTextNode('…'));
+        button.setAttribute('aria-label', translate('search.resultLabel', { index: index + 1, heading: heading.textContent, text: result.text }));
+        button.append(heading, snippet);
+        button.addEventListener('click', () => selectSearchResult(index));
+        item.appendChild(button);
+        fragment.appendChild(item);
+      });
+      searchResultList.replaceChildren(fragment);
+      setSearchResultStatus(searchResults.length
+        ? translate(searchResultsTruncated ? 'search.countTruncated' : 'search.count', { count: searchResults.length })
+        : translate('error.noMatches'));
+      btnSearchPrevious.disabled = searchResults.length === 0;
+      btnSearchNext.disabled = searchResults.length === 0;
+      reportNavigationDuration('search', startedAt);
+    };
+    if (blocks.length > 200) {
+      setSearchResultStatus(translate('error.calculating'));
+      (async () => {
+        for (let offset = 0; offset < blocks.length; offset += 100) {
+          if (generation !== searchRenderGeneration || !scan(offset, Math.min(offset + 100, blocks.length))) break;
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+        render();
+      })();
+    } else {
+      scan(0, blocks.length);
+      render();
+    }
+  }
+
+  function selectSearchResult(index) {
+    if (index < 0 || index >= searchResults.length) return;
+    clearActiveSearchBlock();
+    activeSearchResultIndex = index;
+    const result = searchResults[index];
+    activeSearchElement = result.element;
+    activeSearchElement.classList.add('search-current-block');
+    activeSearchElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    searchResultList.querySelectorAll('.search-result-button').forEach((button, buttonIndex) => {
+      const selected = buttonIndex === index;
+      button.classList.toggle('is-current', selected);
+      if (selected) button.setAttribute('aria-current', 'location');
+      else button.removeAttribute('aria-current');
+    });
+    setSearchResultStatus(translate('search.position', { index: index + 1, count: searchResults.length, suffix: searchResultsTruncated ? '+' : '' }));
+  }
+
+  function moveSearchResult(direction) {
+    if (!searchResults.length) return;
+    const nextIndex = activeSearchResultIndex < 0
+      ? (direction > 0 ? 0 : searchResults.length - 1)
+      : (activeSearchResultIndex + direction + searchResults.length) % searchResults.length;
+    selectSearchResult(nextIndex);
+  }
+
+  function openSearchDrawer() {
+    setActiveDrawer(searchDrawer);
+    renderSearchResults();
+    searchQueryInput.focus();
+    searchQueryInput.setSelectionRange(searchQueryInput.value.length, searchQueryInput.value.length);
   }
 
   function updateActiveTableOfContentsEntry(newHeadingId) {
@@ -2340,8 +3163,8 @@ SOFTWARE.
       headingId: currentHeading,
       lineIndex,
       writingMode: activeViewerSettings.writingMode,
-      bgOffsetX: backgroundMediaOffsetX,
-      bgOffsetY: backgroundMediaOffsetY,
+      bgOffsetX: backgroundMediaState.offsetX,
+      bgOffsetY: backgroundMediaState.offsetY,
       savedAt: Date.now()
     };
   }
@@ -2350,8 +3173,8 @@ SOFTWARE.
     try {
       const raw = localStorage.getItem(getPositionStorageKey());
       const positionData = raw ? JSON.parse(raw) : {};
-      positionData.bgOffsetX = backgroundMediaOffsetX;
-      positionData.bgOffsetY = backgroundMediaOffsetY;
+      positionData.bgOffsetX = backgroundMediaState.offsetX;
+      positionData.bgOffsetY = backgroundMediaState.offsetY;
       localStorage.setItem(getPositionStorageKey(), JSON.stringify(positionData));
       confirmLocalStorageWrite(getPositionStorageKey());
     } catch (error) {
@@ -2381,10 +3204,12 @@ SOFTWARE.
 
     try {
       const pos = position ?? JSON.parse(raw);
+      if (!pos || typeof pos !== 'object' || Array.isArray(pos)) return;
       const isVertical = activeViewerSettings.writingMode === 'vertical';
       if (pos.writingMode === activeViewerSettings.writingMode) {
-        viewerContainer.scrollTop = Number.isFinite(pos.scrollTop) ? pos.scrollTop : 0;
-        viewerContainer.scrollLeft = Number.isFinite(pos.scrollLeft) ? pos.scrollLeft : 0;
+        viewerContainer.scrollTop = Number.isFinite(pos.scrollTop) ? Math.max(0, Math.min(pos.scrollTop, viewerContainer.scrollHeight - viewerContainer.clientHeight)) : 0;
+        const maxScroll = viewerContainer.scrollWidth - viewerContainer.clientWidth;
+        viewerContainer.scrollLeft = Number.isFinite(pos.scrollLeft) ? Math.max(-maxScroll, Math.min(pos.scrollLeft, 0)) : 0;
         return;
       }
       const block = Number.isInteger(pos.lineIndex)
@@ -2393,7 +3218,9 @@ SOFTWARE.
       if (block) {
         block.scrollIntoView({ behavior: 'auto', block: 'start', inline: 'start' });
       } else if (typeof (pos.progressRatio ?? pos.ratio) === 'number') {
-        const ratio = Math.min(1, Math.max(0, pos.progressRatio ?? pos.ratio));
+        const savedRatio = pos.progressRatio ?? pos.ratio;
+        if (!Number.isFinite(savedRatio)) return;
+        const ratio = Math.min(1, Math.max(0, savedRatio));
         if (!isVertical) {
           viewerContainer.scrollTop = (viewerContainer.scrollHeight - viewerContainer.clientHeight) * ratio;
         } else {
@@ -2423,13 +3250,13 @@ SOFTWARE.
   }
 
   function openSettingsDrawer() {
-    tocDrawer.classList.remove('is-open');
-    settingsDrawer.classList.add('is-open');
+    setActiveDrawer(settingsDrawer);
+    settingsDrawer.focus();
   }
 
   function openTocDrawer() {
-    settingsDrawer.classList.remove('is-open');
-    tocDrawer.classList.add('is-open');
+    setActiveDrawer(tocDrawer);
+    tocDrawer.focus();
     const currentBtn = tocListEl.querySelector('.toc-item.is-current');
     if (currentBtn) {
       currentBtn.scrollIntoView({ block: 'nearest' });
@@ -2437,8 +3264,23 @@ SOFTWARE.
   }
 
   function closeAllDrawers() {
-    settingsDrawer.classList.remove('is-open');
-    tocDrawer.classList.remove('is-open');
+    setActiveDrawer(null);
+    const trigger = lastDrawerTrigger?.closest?.('.drawer-panel') ? btnOpenSettings : lastDrawerTrigger;
+    trigger?.focus();
+  }
+
+  let lastDrawerTrigger = null;
+  function setActiveDrawer(activeDrawer) {
+    const drawers = [settingsDrawer, tocDrawer, searchDrawer];
+    const triggers = [btnOpenSettings, btnOpenToc, btnOpenSearch];
+    drawers.forEach((drawer, index) => {
+      if (drawer === activeDrawer) drawer.classList.add('is-open');
+      else drawer.classList.remove('is-open');
+      drawer.setAttribute('aria-hidden', String(drawer !== activeDrawer));
+      drawer.inert = drawer !== activeDrawer;
+      triggers[index].setAttribute('aria-expanded', String(drawer === activeDrawer));
+    });
+    if (activeDrawer) lastDrawerTrigger = triggers[drawers.indexOf(activeDrawer)];
   }
 
   function getPageScrollDelta(writingMode, key, shiftKey, page) {
@@ -2483,11 +3325,48 @@ SOFTWARE.
     e.stopPropagation();
     closeAllDrawers();
   });
+  initializeBookmarkControls();
 
-  document.addEventListener('keydown', (e) => {
+  btnOpenSearch.addEventListener('click', event => {
+    event.stopPropagation();
+    openSearchDrawer();
+  });
+  btnCloseSearch.addEventListener('click', event => {
+    event.stopPropagation();
+    closeAllDrawers();
+  });
+  searchQueryInput.addEventListener('input', renderSearchResults);
+  searchIncludeHeadings.addEventListener('change', renderSearchResults);
+  searchIncludeBody.addEventListener('change', renderSearchResults);
+  searchDistinguishVariants.addEventListener('change', renderSearchResults);
+  searchQueryInput.addEventListener('keydown', event => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    moveSearchResult(event.shiftKey ? -1 : 1);
+  });
+  btnSearchPrevious.addEventListener('click', () => moveSearchResult(-1));
+  btnSearchNext.addEventListener('click', () => moveSearchResult(1));
+
+  function initializeKeyboardHandling() {
+    document.addEventListener('keydown', handleViewerKeydown);
+    document.addEventListener('keyup', handleHeldScrollKeyup);
+    window.addEventListener('blur', stopHeldScroll);
+  }
+
+  function handleViewerKeydown(e) {
     if (e.key === 'Escape') closeAllDrawers();
     if (e.key === 'F1') { e.preventDefault(); shortcutModal.showModal(); return; }
     if (e.key === 'F11') { e.preventDefault(); toggleFullscreen(); return; }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'f') {
+      e.preventDefault();
+      openSearchDrawer();
+      return;
+    }
+    if (e.key === 'F3' && searchResults.length) {
+      e.preventDefault();
+      moveSearchResult(e.shiftKey ? -1 : 1);
+      return;
+    }
     if (e.target.closest('input, textarea, select, button, a')) return;
     if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 's') { e.preventDefault(); openSettingsDrawer(); return; }
     if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'o') { e.preventDefault(); openTocDrawer(); return; }
@@ -2514,20 +3393,17 @@ SOFTWARE.
     };
     viewerContainer.addEventListener('scrollend', startHeldScroll, { once: true, passive: true });
     heldScrollFallback = window.setTimeout(startHeldScroll, 600);
-  });
+  }
 
-  document.addEventListener('keyup', event => {
+  function handleHeldScrollKeyup(event) {
     if ((heldScrollTimer || heldScrollWaiting) && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', ' '].includes(event.key)) {
       stopHeldScroll();
     }
-  });
-  window.addEventListener('blur', () => {
-    stopHeldScroll();
-  });
+  }
 
   document.addEventListener('click', (e) => {
-    if (!settingsDrawer.classList.contains('is-open') && !tocDrawer.classList.contains('is-open')) return;
-    if (e.target.closest('.drawer-panel') || e.target.closest('#btn-open-settings')) return;
+    if (!settingsDrawer.classList.contains('is-open') && !tocDrawer.classList.contains('is-open') && !searchDrawer.classList.contains('is-open')) return;
+    if (e.target.closest('.drawer-panel') || e.target.closest('#btn-open-settings') || e.target.closest('#btn-open-search')) return;
     closeAllDrawers();
   });
 
@@ -2539,8 +3415,8 @@ SOFTWARE.
 
   function startDrag(clientX, clientY, target) {
     if (shortcutModal.open) return false;
-    if (!backgroundMediaDataUrl) return false;
-    if (target.closest('.drawer-panel') || target.closest('#btn-open-settings') || target.closest('#novel-content')) {
+    if (!backgroundMediaState.dataUrl) return false;
+    if (target.closest('.drawer-panel') || target.closest('#btn-open-settings') || target.closest('#btn-open-search') || target.closest('#novel-content')) {
       return false;
     }
     isDraggingBg = true;
@@ -2548,8 +3424,8 @@ SOFTWARE.
     updateBackgroundViewportIndicator();
     startX = clientX;
     startY = clientY;
-    initialOffsetX = backgroundMediaOffsetX;
-    initialOffsetY = backgroundMediaOffsetY;
+    initialOffsetX = backgroundMediaState.offsetX;
+    initialOffsetY = backgroundMediaState.offsetY;
     return true;
   }
 
@@ -2557,8 +3433,8 @@ SOFTWARE.
     if (!isDraggingBg) return;
     const dx = clientX - startX;
     const dy = clientY - startY;
-    backgroundMediaOffsetX = initialOffsetX + dx;
-    backgroundMediaOffsetY = initialOffsetY + dy;
+    backgroundMediaState.offsetX = initialOffsetX + dx;
+    backgroundMediaState.offsetY = initialOffsetY + dy;
     updateBackgroundPosition();
     saveBackgroundPosition();
   }
@@ -2570,11 +3446,11 @@ SOFTWARE.
 
   document.body.addEventListener('dblclick', (e) => {
     if (shortcutModal.open) return;
-    if (!backgroundMediaDataUrl) return;
-    if (e.target.closest('.drawer-panel') || e.target.closest('#btn-open-settings') || e.target.closest('#novel-content')) return;
+    if (!backgroundMediaState.dataUrl) return;
+    if (e.target.closest('.drawer-panel') || e.target.closest('#btn-open-settings') || e.target.closest('#btn-open-search') || e.target.closest('#novel-content')) return;
 
-    backgroundMediaOffsetX = 0;
-    backgroundMediaOffsetY = 0;
+    backgroundMediaState.offsetX = 0;
+    backgroundMediaState.offsetY = 0;
     updateBackgroundPosition();
     saveBackgroundPosition();
     e.preventDefault();
@@ -2629,11 +3505,11 @@ SOFTWARE.
       } else {
         await new Promise((resolve, reject) => {
           image.onload = resolve;
-          image.onerror = () => reject(new Error('画像データをデコードできません。'));
+          image.onerror = () => reject(new Error(translate('error.importDecode')));
         });
       }
       if (!image.naturalWidth || !image.naturalHeight) {
-        throw new Error('画像の幅または高さを取得できません。');
+        throw new Error(translate('error.importDimensions'));
       }
       return { width: image.naturalWidth, height: image.naturalHeight };
     } finally {
@@ -2649,22 +3525,55 @@ SOFTWARE.
       video.src = url;
       await new Promise((resolve, reject) => {
         video.onloadedmetadata = resolve;
-        video.onerror = () => reject(new Error('動画のメタデータを読み込めません。'));
+        video.onerror = () => reject(new Error(translate('error.videoMetadata')));
       });
-      if (!video.videoWidth || !video.videoHeight) throw new Error('動画の寸法を取得できません。');
+      if (!video.videoWidth || !video.videoHeight) throw new Error(translate('error.videoDimensions'));
     } finally { URL.revokeObjectURL(url); }
   }
 
+  async function importBackgroundMedia(file, mediaType) {
+    if (mediaType === 'image') await validateImageFile(file);
+    else await validateVideoFile(file);
+    await storeBackgroundMedia(file, mediaType);
+    const objectUrl = URL.createObjectURL(file);
+    backgroundMediaState.fileBlob = file.slice(0, file.size, file.type || 'application/octet-stream');
+    backgroundMediaState.fileExtension = getFileExtension(file.name);
+    applyBackgroundImage(objectUrl, false, mediaType);
+    refreshExportButtons();
+  }
+
+  function applyImportedTextState(content, source) {
+    commitSettings({
+      ...activeViewerSettings,
+      fileStem: source.fileStem,
+      documentTitle: source.documentTitle
+    }, {
+      replace: true,
+      persist: false,
+      render: false,
+      preserveReadingPosition: false,
+      refreshReadingState: false
+    });
+    importedTextFileBlob = source.blob;
+    importedTextFileExtension = source.extension;
+    viewerContainer.scrollTop = 0;
+    viewerContainer.scrollLeft = 0;
+    displayViewerContent(content, { alreadySanitized: true });
+    refreshExportButtons();
+  }
+
   function getImportFailureReason(error, fallback) {
-    if (error?.name === 'QuotaExceededError') return 'ブラウザーの保存領域が不足しているため、元ファイルを保存できません。';
+    if (error?.name === 'QuotaExceededError') return translate('error.importQuota');
     return error?.message || fallback;
   }
 
   async function handleFiles(files) {
     let combinedHtml = '';
     let pendingTextSource = null;
-    const failedKinds = new Set();
-    const failedFiles = [];
+    const importResult = { media: [], text: [], failures: [], textStatus: 'not-started' };
+    const recordFailure = (kind, file, error, fallback) => importResult.failures.push({
+      kind, filename: file.name || file.filename, message: getImportFailureReason(error, fallback)
+    });
     for (const file of files) {
       const isImage = file.type.startsWith('image/') || /\.(png|apng|jpg|jpeg|webp|gif|bmp|svg)$/i.test(file.name);
       const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|ogv|ogg|mov|m4v)$/i.test(file.name);
@@ -2672,18 +3581,11 @@ SOFTWARE.
       if (isImage || isVideo) {
         try {
           const mediaType = isVideo ? 'video' : 'image';
-           if (mediaType === 'image') await validateImageFile(file);
-           else await validateVideoFile(file);
-          await storeBackgroundMedia(file, mediaType);
-          const objectUrl = URL.createObjectURL(file);
-          backgroundMediaFileBlob = file.slice(0, file.size, file.type || 'application/octet-stream');
-          backgroundMediaFileExtension = getFileExtension(file.name);
-          applyBackgroundImage(objectUrl, false, mediaType);
-          refreshExportButtons();
+          await importBackgroundMedia(file, mediaType);
+          importResult.media.push({ filename: file.name, mediaType, status: 'applied' });
         } catch (err) {
           console.error('背景メディアの読み込みに失敗しました:', err);
-          failedKinds.add('media');
-          failedFiles.push(`${file.name}: ${getImportFailureReason(err, 'メディアを読み込めません')}`);
+          recordFailure('media', file, err, translate('error.importMedia'));
         }
       } else if (isText) {
         try {
@@ -2691,10 +3593,11 @@ SOFTWARE.
           let content;
           let title = '';
           if (/\.html?$/i.test(file.name)) {
-            const doc = new DOMParser().parseFromString(text, 'text/html');
-            const article = doc.querySelector('#novel-content') || doc.body;
-            title = doc.title.trim();
-            content = sanitizeHTML(article.innerHTML);
+            const template = document.createElement('template');
+            template.innerHTML = text;
+            const article = template.content.querySelector('#novel-content');
+            title = template.content.querySelector('title')?.textContent.trim() || '';
+            content = sanitizeHTML(article ? article.innerHTML : template.innerHTML);
           } else {
             content = sanitizeHTML(plainTextToSafeHTML(text));
           }
@@ -2706,69 +3609,56 @@ SOFTWARE.
             documentTitle: title,
             filename: file.name
           };
+          importResult.text.push({ filename: file.name, status: 'parsed' });
         } catch (err) {
           console.error('テキストファイルの読み込みに失敗しました:', err);
-          failedKinds.add('text');
-          failedFiles.push(`${file.name}: ${getImportFailureReason(err, 'テキストを読み込めません')}`);
+          recordFailure('text', file, err, translate('error.importText'));
         }
       } else {
-        failedKinds.add('unsupported');
-        failedFiles.push(`${file.name}: 対応していない形式です`);
+        recordFailure('unsupported', file, translate('error.unsupported'), translate('error.unsupported'));
       }
     }
 
-    let textCommitted = false;
     if (pendingTextSource && combinedHtml.trim()) {
-      const keys = [STORAGE_KEYS.CONTENT, STORAGE_KEYS.SETTINGS, getPositionStorageKey()];
-      const previousValues = new Map();
+      importResult.textStatus = 'pending';
       try {
-        for (const key of keys) previousValues.set(key, localStorage.getItem(key));
         const nextSettings = {
           ...activeViewerSettings,
           fileStem: pendingTextSource.fileStem,
           documentTitle: pendingTextSource.documentTitle
         };
-        localStorage.setItem(STORAGE_KEYS.CONTENT, combinedHtml);
-        localStorage.removeItem(getPositionStorageKey());
-        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(nextSettings));
-        await storeImportedText(pendingTextSource.blob, pendingTextSource.extension);
-        Object.assign(activeViewerSettings, nextSettings);
-        importedTextFileBlob = pendingTextSource.blob;
-        importedTextFileExtension = pendingTextSource.extension;
-        novelContentElement.innerHTML = combinedHtml;
-        textCommitted = true;
-        refreshExportButtons();
-      } catch (err) {
-        for (const [key, value] of [...previousValues].reverse()) {
-          try {
-            if (value === null) localStorage.removeItem(key);
-            else localStorage.setItem(key, value);
-          } catch (rollbackError) {
-            console.error(`取り込み保存の復元に失敗しました (${key}):`, rollbackError);
-          }
+        const changes = [
+          [STORAGE_KEYS.CONTENT, combinedHtml],
+          [getPositionStorageKey(), null],
+          [getBookmarksStorageKey(), null],
+          [STORAGE_KEYS.SETTINGS, JSON.stringify(nextSettings)]
+        ];
+        const importedTextRecord = { blob: pendingTextSource.blob, fileExtension: pendingTextSource.extension || '', updatedAt: Date.now() };
+        if (!await commitSavedData(changes, [{ type: 'put', key: TEXT_STORE_KEY, value: importedTextRecord }])) {
+          throw new Error(translate('error.saveBusy'));
         }
+        applyImportedTextState(combinedHtml, pendingTextSource);
+        importResult.textStatus = 'committed';
+        for (const textImport of importResult.text) textImport.status = 'committed';
+      } catch (err) {
         console.error('テキストファイルの保存に失敗しました:', err);
-        failedKinds.add('text');
-        failedFiles.push(`${pendingTextSource.filename}: ${getImportFailureReason(err, '本文を保存できません')}`);
+        importResult.textStatus = 'failed';
+        recordFailure('text', pendingTextSource, err, translate('error.importQuota'));
       }
     }
 
-    if (textCommitted) {
-      viewerContainer.scrollTop = 0;
-      viewerContainer.scrollLeft = 0;
-      collectTableOfContentsEntries();
-      updateReadingState();
-    }
     applySettings(activeViewerSettings);
-    if (!textCommitted) saveSettings();
+    if (!pendingTextSource) saveSettings();
     closeAllDrawers();
-    if (failedKinds.size) {
+    if (importResult.failures.length) {
       const reasons = [];
-      if (failedKinds.has('unsupported')) reasons.push('対応していないファイル形式です。');
-      if (failedKinds.has('text')) reasons.push('テキストを読み込めませんでした。ファイルの破損やアクセス権を確認してください。');
-      if (failedKinds.has('media')) reasons.push('画像・動画を読み込めませんでした。形式やファイルの破損、保存領域を確認してください。');
-      showErrorNotice(`${reasons.join(' ')} ${failedFiles.join(' / ')}`);
+      const failureKinds = new Set(importResult.failures.map(failure => failure.kind));
+      if (failureKinds.has('unsupported')) reasons.push(translate('error.importKinds'));
+      if (failureKinds.has('text')) reasons.push(translate('error.importTextPrefix'));
+      if (failureKinds.has('media')) reasons.push(translate('error.importMediaPrefix'));
+      showErrorNotice(`${reasons.join(' ')} ${importResult.failures.map(failure => `${failure.filename}: ${failure.message}`).join(' / ')}`);
     }
+    return importResult;
   }
 
   btnImportFile.addEventListener('click', () => fileInput.click());
@@ -2780,7 +3670,37 @@ SOFTWARE.
     fileInput.value = '';
   });
 
-  loadedFileDownloads.addEventListener('click', async (event) => {
+  async function removeImportedText(exported) {
+    const nextSettings = { ...activeViewerSettings, fileStem: '', documentTitle: '' };
+    const changes = [[getPositionStorageKey(), null], [getBookmarksStorageKey(), null]];
+    if (!exported) changes.push([STORAGE_KEYS.CONTENT, null], [STORAGE_KEYS.SETTINGS, JSON.stringify(nextSettings)]);
+    if (!await changeSavedData(changes, exported ? [] : [TEXT_STORE_KEY])) return false;
+    importedTextFileBlob = null;
+    importedTextFileExtension = '';
+    commitSettings({ fileStem: '', documentTitle: '' }, {
+      persist: false,
+      render: false,
+      preserveReadingPosition: false,
+      refreshReadingState: false
+    });
+    viewerContainer.scrollTop = 0;
+    viewerContainer.scrollLeft = 0;
+    displayViewerContent(getViewerResetDefaults().content);
+    applySettings(activeViewerSettings);
+    return true;
+  }
+
+  async function removeBackgroundMedia(mediaType, exported) {
+    if (!await changeSavedData([], exported ? [] : [MEDIA_STORE_KEY])) return false;
+    backgroundMediaState.fileBlob = null;
+    backgroundMediaState.fileExtension = '';
+    if (backgroundMediaState.mediaType === mediaType) applyBackgroundImage(null);
+    applySettings(activeViewerSettings);
+    return true;
+  }
+
+  function initializeLoadedFileDownloadHandler() {
+    loadedFileDownloads.addEventListener('click', async (event) => {
     const button = event.target.closest('button');
     if (!button) return;
     const deleteType = getRuntimeDataDeleteType(button);
@@ -2789,31 +3709,16 @@ SOFTWARE.
         const type = deleteType;
         const exported = document.documentElement.dataset.exported === 'true';
         if (type === 'text') {
-          const nextSettings = { ...activeViewerSettings, fileStem: '', documentTitle: '' };
-          const changes = [[getPositionStorageKey(), null]];
-          if (!exported) changes.push([STORAGE_KEYS.CONTENT, null], [STORAGE_KEYS.SETTINGS, JSON.stringify(nextSettings)]);
-          if (!await changeSavedData(changes, exported ? [] : [TEXT_STORE_KEY])) return;
-          importedTextFileBlob = null; importedTextFileExtension = '';
-          activeViewerSettings.fileStem = '';
-          activeViewerSettings.documentTitle = '';
-          novelContentElement.innerHTML = getViewerResetDefaults().content;
-          viewerContainer.scrollTop = 0;
-          viewerContainer.scrollLeft = 0;
-          collectTableOfContentsEntries();
-          updateReadingState();
-          applySettings(activeViewerSettings);
+          if (!await removeImportedText(exported)) return;
         } else if (type === 'image' || type === 'video') {
-          if (!await changeSavedData([], exported ? [] : [MEDIA_STORE_KEY])) return;
-          backgroundMediaFileBlob = null; backgroundMediaFileExtension = '';
-          if (backgroundMediaType === type) applyBackgroundImage(null);
-          applySettings(activeViewerSettings);
+          if (!await removeBackgroundMedia(type, exported)) return;
         }
         refreshExportButtons();
         return;
       }
       if (button.id === 'btn-download-text') await downloadWithHash(importedTextFileBlob, importedTextFileExtension, '.txt');
-      else if (button.id === 'btn-download-image') await downloadWithHash(backgroundMediaFileBlob, backgroundMediaFileExtension, '.img');
-      else if (button.id === 'btn-download-video') await downloadWithHash(backgroundMediaFileBlob, backgroundMediaFileExtension, '.mp4');
+      else if (button.id === 'btn-download-image') await downloadWithHash(backgroundMediaState.fileBlob, backgroundMediaState.fileExtension, '.img');
+      else if (button.id === 'btn-download-video') await downloadWithHash(backgroundMediaState.fileBlob, backgroundMediaState.fileExtension, '.mp4');
     } catch (err) {
       if (deleteType) {
         reportOperationFailure('元ファイルの削除', err);
@@ -2822,24 +3727,26 @@ SOFTWARE.
       const label = button.id === 'btn-download-text' ? 'テキスト' : button.id === 'btn-download-image' ? '画像' : '動画';
       reportOperationFailure(`${label}のダウンロード`, err);
     }
-  });
+    });
+  }
+  initializeLoadedFileDownloadHandler();
 
   async function createExportHtmlBlob() {
       let exportMediaDataUrl = null;
-      let exportMediaType = document.body.classList.contains('video-bg') ? 'video' : backgroundMediaType;
-      if (isMediaType(backgroundMediaType)) {
+      let exportMediaType = document.body.classList.contains('video-bg') ? 'video' : backgroundMediaState.mediaType;
+      if (isMediaType(backgroundMediaState.mediaType)) {
         const savedMedia = await loadBackgroundMedia();
-        if (backgroundMediaFileBlob instanceof Blob) {
-          exportMediaDataUrl = await blobToDataUrl(backgroundMediaFileBlob);
+        if (backgroundMediaState.fileBlob instanceof Blob) {
+          exportMediaDataUrl = await blobToDataUrl(backgroundMediaState.fileBlob);
         } else if (savedMedia && savedMedia.blob instanceof Blob) {
           exportMediaDataUrl = await blobToDataUrl(savedMedia.blob);
           exportMediaType = savedMedia.mediaType === 'video' ? 'video' : 'image';
-        } else if (backgroundMediaObjectUrl) {
-          const response = await fetch(backgroundMediaObjectUrl);
+        } else if (backgroundMediaState.objectUrl) {
+          const response = await fetch(backgroundMediaState.objectUrl);
           if (!response.ok) throw new Error('背景メディアを読み出せませんでした。');
           exportMediaDataUrl = await blobToDataUrl(await response.blob());
-        } else if (backgroundMediaDataUrl && backgroundMediaDataUrl.startsWith('data:')) {
-          exportMediaDataUrl = backgroundMediaDataUrl;
+        } else if (backgroundMediaState.dataUrl && backgroundMediaState.dataUrl.startsWith('data:')) {
+          exportMediaDataUrl = backgroundMediaState.dataUrl;
         }
         if (exportMediaDataUrl && exportMediaDataUrl.startsWith('blob:')) {
           const response = await fetch(exportMediaDataUrl);
@@ -2853,15 +3760,18 @@ SOFTWARE.
 
       const clonedDoc = document.documentElement.cloneNode(true);
       clonedDoc.querySelectorAll('.drawer-panel').forEach(el => el.classList.remove('is-open'));
+      clonedDoc.querySelector('#bookmark-list')?.replaceChildren();
+      clonedDoc.querySelector('#bookmark-name')?.setAttribute('value', '');
       clonedDoc.querySelectorAll('.file-action-size').forEach(el => { el.textContent = ''; });
 
       const configScript = clonedDoc.querySelector('#viewer-initial-config');
-      if (configScript) configScript.textContent = '\n' + JSON.stringify(activeViewerSettings, null, 2) + '\n';
+      if (configScript) configScript.textContent = '\n' + serializeEmbeddedJson(activeViewerSettings, 2) + '\n';
 
       const resetDefaults = document.createElement('script');
       resetDefaults.type = 'application/json';
       resetDefaults.id = 'viewer-reset-defaults';
-      resetDefaults.textContent = JSON.stringify(getViewerResetDefaults());
+      const resetData = getViewerResetDefaults();
+      resetDefaults.textContent = serializeEmbeddedJson(createEmbeddedResetDefaults(resetData.settings, resetData.content));
 
       const clonedHead = clonedDoc.querySelector('head');
       if (!clonedHead) throw new Error('エクスポート先のhead要素が見つかりません。');
@@ -2877,7 +3787,7 @@ SOFTWARE.
       const exportTextBlob = importedTextFileBlob || (savedText && savedText.blob instanceof Blob ? savedText.blob : null);
       const exportTextExtension = importedTextFileBlob ? importedTextFileExtension : savedText?.fileExtension || '';
       const textBase64 = exportTextBlob ? arrayBufferToBase64(await exportTextBlob.arrayBuffer()) : '';
-      downloadData.textContent = JSON.stringify(createEmbeddedDownloadData(textBase64, exportTextExtension, exportTextBlob ? exportTextBlob.type : '', exportMediaDataUrl, exportMediaType, backgroundMediaFileExtension));
+      downloadData.textContent = serializeEmbeddedJson(createEmbeddedDownloadData(textBase64, exportTextExtension, exportTextBlob ? exportTextBlob.type : '', exportMediaDataUrl, exportMediaType, backgroundMediaState.fileExtension), 2);
       clonedHead.appendChild(downloadData);
 
       clonedDoc.setAttribute('data-theme', activeViewerSettings.theme);
@@ -2895,7 +3805,16 @@ SOFTWARE.
       if (clonedHeadTitle) clonedHeadTitle.textContent = activeViewerSettings.documentTitle || fileStem;
 
       const exportedContentEl = clonedDoc.querySelector('#novel-content');
-      if (exportedContentEl) exportedContentEl.innerHTML = sanitizeHTML(novelContentElement.innerHTML);
+      if (exportedContentEl) {
+        const exportContent = novelContentElement.cloneNode(true);
+        exportContent.querySelectorAll('.search-current-block').forEach(element => element.classList.remove('search-current-block'));
+        exportedContentEl.innerHTML = sanitizeHTML(exportContent.innerHTML);
+      }
+      const exportedSearchInput = clonedDoc.querySelector('#search-query');
+      if (exportedSearchInput) exportedSearchInput.value = '';
+      clonedDoc.querySelector('#search-results')?.replaceChildren();
+      const exportedSearchStatus = clonedDoc.querySelector('#search-result-status');
+      if (exportedSearchStatus) exportedSearchStatus.textContent = '';
 
       // Background media is restored exclusively from viewer-download-data
       // during init(); clear the source document's background styles and state.
@@ -2921,7 +3840,7 @@ SOFTWARE.
   let htmlExportSizeTimer = null;
   function scheduleHtmlExportSizeUpdate() {
     const sizeElement = document.getElementById('html-export-size');
-    if (sizeElement) sizeElement.textContent = '計算中';
+    if (sizeElement) sizeElement.textContent = translate('error.calculating');
     if (htmlExportSizeTimer) clearTimeout(htmlExportSizeTimer);
     htmlExportSizeTimer = setTimeout(() => {
       htmlExportSizeTimer = null;
@@ -2932,14 +3851,14 @@ SOFTWARE.
   async function updateHtmlExportSize() {
     const token = ++htmlExportSizeUpdateToken;
     const sizeElement = document.getElementById('html-export-size');
-    if (sizeElement) sizeElement.textContent = '計算中';
+    if (sizeElement) sizeElement.textContent = translate('error.calculating');
     try {
       const blob = await createExportHtmlBlob();
       if (token !== htmlExportSizeUpdateToken) return;
       updateExportFileSize(sizeElement, blob.size);
     } catch (err) {
       if (token !== htmlExportSizeUpdateToken) return;
-      if (sizeElement) sizeElement.textContent = '計測不可';
+      if (sizeElement) sizeElement.textContent = translate('error.unavailable');
       console.warn('HTMLエクスポートサイズを計算できませんでした:', err);
     }
   }
@@ -2971,7 +3890,14 @@ SOFTWARE.
     if (!element) return { settings: fallbackSettings, content: fallbackContent };
     try {
       const data = JSON.parse(element.textContent);
-      return { settings: data.settings || fallbackSettings, content: typeof data.content === 'string' ? data.content : fallbackContent };
+      if (!data || typeof data !== 'object' || Array.isArray(data) ||
+          (data.schemaVersion !== undefined && data.schemaVersion !== 0 && data.schemaVersion !== EMBEDDED_DATA_SCHEMA_VERSION)) {
+        return { settings: fallbackSettings, content: fallbackContent };
+      }
+      return {
+        settings: normalizeViewerSettings(data.settings, fallbackSettings),
+        content: typeof data.content === 'string' ? data.content : fallbackContent
+      };
     } catch (_) { return { settings: fallbackSettings, content: fallbackContent }; }
   }
 
@@ -2984,39 +3910,50 @@ SOFTWARE.
     return viewerResetDefaults;
   }
 
-  btnResetAll.addEventListener('click', async () => {
+  async function resetViewerState() {
     const isExportedDocument = document.documentElement.dataset.exported === 'true';
     const { settings: resetSettings, content: resetContent } = getViewerResetDefaults();
-    const changes = [[getPositionStorageKey(), null]];
-    if (!isExportedDocument) {
-      changes.push([STORAGE_KEYS.SETTINGS, null], [STORAGE_KEYS.CONTENT, null]);
-    }
+    const changes = [[getPositionStorageKey(), null], [getBookmarksStorageKey(), null]];
+    if (!isExportedDocument) changes.push(
+      [STORAGE_KEYS.SETTINGS, null], [STORAGE_KEYS.CONTENT, null], [SAVED_DATA_REVISION_KEY, null]
+    );
     try {
       const mediaKeys = isExportedDocument ? [] : [MEDIA_STORE_KEY, TEXT_STORE_KEY];
-      if (!await changeSavedData(changes, mediaKeys)) return;
+      if (!await changeSavedData(changes, mediaKeys)) return false;
     } catch (error) {
       reportOperationFailure('設定の初期化', error);
-      return;
+      return false;
     }
 
-    activeViewerSettings = { ...resetSettings };
+    commitSettings(resetSettings, {
+      replace: true,
+      persist: false,
+      render: false,
+      preserveReadingPosition: false,
+      refreshReadingState: false
+    });
     importedTextFileBlob = null;
     importedTextFileExtension = '';
-    backgroundMediaFileBlob = null;
-    backgroundMediaFileExtension = '';
+    backgroundMediaState.fileBlob = null;
+    backgroundMediaState.fileExtension = '';
     refreshExportButtons();
     themeDerivedColors = { ...THEME_PALETTES.light };
-    novelContentElement.innerHTML = resetContent;
     applyBackgroundImage(null);
-
     applySettings(activeViewerSettings);
-    collectTableOfContentsEntries();
-
     viewerContainer.scrollTop = 0;
     viewerContainer.scrollLeft = 0;
-    updateReadingState();
+    displayViewerContent(resetContent);
+    updateResetButtonState();
     closeAllDrawers();
-  });
+    return true;
+  }
+
+  function initializeResetHandler() {
+    btnResetAll.addEventListener('click', async () => {
+      await resetViewerState();
+    });
+  }
+  initializeResetHandler();
 
   // 本文クリックによるページ送り。
   let pendingPageTurnTimer = null;
@@ -3026,7 +3963,12 @@ SOFTWARE.
     return !!selection && !selection.isCollapsed && selection.rangeCount > 0;
   };
 
-  window.addEventListener('click', event => {
+  function initializePageTurnHandling() {
+    window.addEventListener('click', handleViewerPageTurnClick);
+    novelContentElement.addEventListener('dblclick', cancelPendingPageTurn);
+  }
+
+  function handleViewerPageTurnClick(event) {
     if (!novelContentElement.contains(event.target)) {
       return;
     }
@@ -3063,14 +4005,14 @@ SOFTWARE.
         viewerContainer.scrollBy({ top: forward ? amount : -amount, behavior: 'smooth' });
       }
     }, 220);
-  });
+  }
 
-  novelContentElement.addEventListener('dblclick', event => {
+  function cancelPendingPageTurn() {
     if (pendingPageTurnTimer) {
       clearTimeout(pendingPageTurnTimer);
       pendingPageTurnTimer = null;
     }
-  });
+  }
 
   const handleReadingPositionChange = () => {
     updateReadingState();
@@ -3131,54 +4073,133 @@ SOFTWARE.
     updateScreenWakeLock();
   });
 
-  viewerContainer.addEventListener('wheel', (e) => {
+  function initializeWheelHandling() {
+    viewerContainer.addEventListener('wheel', handleViewerWheel, { passive: false });
+  }
+
+  function handleViewerWheel(e) {
     if (activeViewerSettings.writingMode === 'vertical' && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
       e.preventDefault();
       viewerContainer.scrollLeft -= e.deltaY;
     }
-  }, { passive: false });
+  }
 
   function resolveInitialContent(savedContent) {
     return typeof savedContent === 'string' && savedContent.trim() ? savedContent : null;
+  }
+
+  function normalizeViewerSettings(savedSettings, defaults) {
+    const source = savedSettings && typeof savedSettings === 'object' && !Array.isArray(savedSettings) ? savedSettings : {};
+    const result = { ...defaults };
+    const ranges = {
+      fontSize: [10, 22], lineHeight: [1, 3], letterSpacing: [0, 0.08], rubyScale: [0.3, 0.7],
+      panelBgAlpha: [0, 1], contentWidth: [480, 960], contentPadding: [16, 80], backgroundBlur: [0, 24]
+    };
+    for (const [key, [minimum, maximum]] of Object.entries(ranges)) {
+      const value = source[key];
+      if (typeof value === 'number' && Number.isFinite(value)) result[key] = Math.min(maximum, Math.max(minimum, value));
+    }
+    for (const key of ['writingMode', 'theme', 'fontFamily']) {
+      const allowed = key === 'writingMode' ? ['horizontal', 'vertical'] : key === 'theme' ? ['light', 'dark'] : ['serif', 'sans'];
+      if (allowed.includes(source[key])) result[key] = source[key];
+    }
+    for (const key of ['showProgress', 'wakeLock', 'autoSync']) {
+      if (typeof source[key] === 'boolean') result[key] = source[key];
+    }
+    for (const key of ['bgColor', 'narrationColor', 'dialogueColor', 'panelColor']) {
+      if (typeof source[key] === 'string' && /^#[0-9a-f]{6}$/i.test(source[key])) result[key] = source[key];
+    }
+    for (const key of ['fileStem', 'documentTitle']) {
+      if (typeof source[key] === 'string') result[key] = source[key].slice(0, 512);
+    }
+    return result;
   }
 
   function readEmbeddedDownloadData(element) {
     if (!element) return null;
     try {
       const data = JSON.parse(element.textContent);
-      return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
+      if (!data || typeof data !== 'object' || Array.isArray(data) ||
+          (data.schemaVersion !== undefined && data.schemaVersion !== 0 && data.schemaVersion !== EMBEDDED_DATA_SCHEMA_VERSION) ||
+          !isValidBase64String(data.textBase64) ||
+          typeof data.textExtension !== 'string' || !/^(?:\.[a-z0-9]{1,10})?$/i.test(data.textExtension) ||
+          typeof data.textMimeType !== 'string' ||
+          (data.textMimeType !== '' && !/^[\x21-\x7e]+\/[\x21-\x7e]+$/.test(data.textMimeType))) return null;
+      const mediaFieldsValid = data.mediaIncluded === true
+        ? (isMediaType(data.mediaType) && isEmbeddableMediaDataUrl(data.mediaDataUrl, data.mediaType) &&
+          typeof data.mediaExtension === 'string' && /^(?:\.[a-z0-9]{1,10})?$/i.test(data.mediaExtension))
+        : data.mediaIncluded === false && data.mediaType === null && data.mediaDataUrl === '' && data.mediaExtension === '';
+      return {
+        schemaVersion: EMBEDDED_DATA_SCHEMA_VERSION,
+        textBase64: data.textBase64,
+        textExtension: data.textExtension,
+        textMimeType: data.textMimeType,
+        mediaIncluded: mediaFieldsValid && data.mediaIncluded,
+        mediaType: mediaFieldsValid && data.mediaIncluded ? data.mediaType : null,
+        mediaExtension: mediaFieldsValid && data.mediaIncluded ? data.mediaExtension : '',
+        mediaDataUrl: mediaFieldsValid && data.mediaIncluded ? data.mediaDataUrl : '',
+        mediaInvalid: !mediaFieldsValid
+      };
     } catch (_) { return null; }
   }
 
   function reportEmbeddedDownloadError(error) {
     console.warn('エクスポートデータを復元できませんでした:', error);
-    backgroundMediaFileBlob = null;
-    backgroundMediaFileExtension = '';
+    backgroundMediaState.fileBlob = null;
+    backgroundMediaState.fileExtension = '';
     applyBackgroundImage(null);
-    showErrorNotice('エクスポートHTMLの内蔵データを復元できませんでした。');
+    showErrorNotice(translate('error.exportData'));
+  }
+
+  function restoreInitialSettings(isExportedDocument) {
+    let savedSettings = null;
+    try {
+      savedSettings = isExportedDocument ? null : localStorage.getItem(STORAGE_KEYS.SETTINGS);
+      if (savedSettings) {
+        commitSettings(normalizeViewerSettings(JSON.parse(savedSettings), DEFAULT_SETTINGS), {
+          replace: true, persist: false, render: false, preserveReadingPosition: false, refreshReadingState: false
+        });
+      }
+    } catch (_) {
+      commitSettings(DEFAULT_SETTINGS, {
+        replace: true, persist: false, render: false, preserveReadingPosition: false, refreshReadingState: false
+      });
+    }
+    if (isExportedDocument) {
+      commitSettings({ wakeLock: false }, {
+        persist: false, render: false, preserveReadingPosition: false, refreshReadingState: false
+      });
+    }
+    return savedSettings;
+  }
+
+  function restoreInitialContent(isExportedDocument) {
+    const savedContent = isExportedDocument ? null : localStorage.getItem(STORAGE_KEYS.CONTENT);
+    return resolveInitialContent(savedContent);
   }
 
   async function init() {
     const isExportedDocument = document.documentElement.dataset.exported === 'true';
+    const browserLanguages = typeof navigator !== 'undefined' && Array.isArray(navigator.languages) && navigator.languages.length
+      ? navigator.languages
+      : typeof navigator !== 'undefined' ? navigator.language : [];
+    applyLanguage(resolveBrowserLanguage(browserLanguages));
     currentDocumentId = isExportedDocument
       ? (document.documentElement.dataset.documentId || 'exported')
       : 'default';
-    try {
-      const savedSettings = isExportedDocument ? null : localStorage.getItem(STORAGE_KEYS.SETTINGS);
-      if (savedSettings) activeViewerSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(savedSettings) };
-    } catch (_) {
-      activeViewerSettings = { ...DEFAULT_SETTINGS };
+    if (!isExportedDocument) {
+      try { await recoverSavedDataTransaction(); }
+      catch (error) {
+        console.error('保存処理の復旧に失敗しました:', error);
+        showErrorNotice(translate('error.savedDataRecovery'));
+        return;
+      }
     }
-    if (isExportedDocument) activeViewerSettings.wakeLock = false;
+    restoreInitialSettings(isExportedDocument);
     themeDerivedColors = { ...THEME_PALETTES[activeViewerSettings.theme] || THEME_PALETTES.light };
 
-    const savedContent = isExportedDocument ? null : localStorage.getItem(STORAGE_KEYS.CONTENT);
-    const initialContent = resolveInitialContent(savedContent);
-    if (initialContent) novelContentElement.innerHTML = sanitizeHTML(initialContent);
-
     applySettings(activeViewerSettings);
-    collectTableOfContentsEntries();
-    updateReadingState();
+    displayViewerContent(restoreInitialContent(isExportedDocument));
     updateResetButtonState();
     scheduleHtmlExportSizeUpdate();
 
@@ -3200,12 +4221,13 @@ SOFTWARE.
           importedTextFileBlob = new Blob([bytes], { type: data.textMimeType || 'application/octet-stream' });
           importedTextFileExtension = data.textExtension || '';
         }
+        if (data.mediaInvalid) throw new Error('背景メディアの内蔵データが不正です。');
         if (data.mediaIncluded || data.mediaDataUrl) {
           if (!isMediaType(data.mediaType) || !isEmbeddableMediaDataUrl(data.mediaDataUrl, data.mediaType)) {
             throw new Error('背景メディアの内蔵データが不正です。');
           }
-          backgroundMediaFileBlob = dataUrlToBlob(data.mediaDataUrl);
-          backgroundMediaFileExtension = data.mediaExtension || '';
+          backgroundMediaState.fileBlob = dataUrlToBlob(data.mediaDataUrl);
+          backgroundMediaState.fileExtension = data.mediaExtension || '';
           applyBackgroundImage(data.mediaDataUrl, false, data.mediaType, error => {
             reportEmbeddedDownloadError(error);
             refreshExportButtons();
@@ -3220,11 +4242,11 @@ SOFTWARE.
       try {
         const savedMedia = await loadBackgroundMedia();
         if (savedMedia && savedMedia.blob instanceof Blob) {
-          backgroundMediaFileBlob = savedMedia.blob;
-          backgroundMediaFileExtension = savedMedia.fileExtension || '';
-          backgroundMediaType = savedMedia.mediaType === 'video' ? 'video' : 'image';
+          backgroundMediaState.fileBlob = savedMedia.blob;
+          backgroundMediaState.fileExtension = savedMedia.fileExtension || '';
+          backgroundMediaState.mediaType = savedMedia.mediaType === 'video' ? 'video' : 'image';
           const objectUrl = URL.createObjectURL(savedMedia.blob);
-          applyBackgroundImage(objectUrl, true, backgroundMediaType);
+          applyBackgroundImage(objectUrl, true, backgroundMediaState.mediaType);
         }
         const savedText = await loadImportedText();
         if (savedText && savedText.blob instanceof Blob) {
@@ -3241,6 +4263,7 @@ SOFTWARE.
     scheduleHtmlExportSizeUpdate();
   }
 
+  initializeKeyboardHandling();
   init();
 })();
 </script>

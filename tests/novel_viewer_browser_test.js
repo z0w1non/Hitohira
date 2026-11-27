@@ -9,7 +9,7 @@ const os = require('node:os');
 const { createServer } = require('node:http');
 const { createHash } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
-const { dispatchKey, formatCaseLine, terminateBrowserTree, waitForCondition, createCdpClient } = require('./test_utils');
+const { dispatchKey, formatCaseLine, terminateBrowserTree, waitForCondition, createCdpClient, classifyBrowserFailure } = require('./test_utils');
 
 const browserCandidates = [
   { name: 'Google Chrome', path: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' },
@@ -26,6 +26,7 @@ const root = path.resolve(__dirname, '..');
 const fileUrl = pathToFileURL(path.join(root, 'hitohira.html')).href;
 let childError = '';
 let childExit = null;
+let lastBrowserAttempt = null;
 let activeCleanup = null;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function removeTemporaryProfile(profile) {
@@ -209,13 +210,18 @@ async function main() {
     const connect = async (browserProfile = profile, startUrl = fileUrl) => {
       const args = [...browserArgs, `--user-data-dir=${browserProfile}`, usePipe ? 'about:blank' : startUrl];
       child = spawn(browser.path, args, { stdio });
+      const attempt = lastBrowserAttempt = {
+        browser: `${browser.name} (${browser.path})`, transport: usePipe ? 'pipe' : 'TCP', stage: 'browser startup',
+        args, url: startUrl, exit: null, stderr: ''
+      };
       childClosed = new Promise(resolve => child.once('close', resolve));
       child.on('error', error => { childError += `spawn error: ${error.message}\n`; });
-      child.on('exit', (code, signal) => { childExit = { code, signal }; });
-      child.stderr.on('data', chunk => { childError += chunk.toString(); });
+      child.on('exit', (code, signal) => { childExit = attempt.exit = { code, signal }; });
+      child.stderr.on('data', chunk => { const output = chunk.toString(); childError += output; attempt.stderr += output; });
       let send;
       try {
         if (usePipe) {
+          attempt.stage = 'CDP pipe handshake';
           const sendBrowser = cdpPipe(child.stdio[3], child.stdio[4]);
           const { targetInfos } = await sendBrowser('Target.getTargets');
           const target = targetInfos.find(info => info.type === 'page' && info.url === 'about:blank');
@@ -225,8 +231,11 @@ async function main() {
           const navigation = await send('Page.navigate', { url: startUrl });
           assert.ok(!navigation.errorText, navigation.errorText);
         } else {
+          attempt.stage = 'CDP port announcement';
           const port = requestedPort || await waitForDevToolsPort(browserProfile, child);
+          attempt.stage = 'CDP target discovery';
           const target = await waitForTarget(port, startUrl);
+          attempt.stage = 'CDP WebSocket connection';
           ws = new WebSocket(target.webSocketDebuggerUrl);
           await waitForSocketOpen(ws);
           send = createCdpClient(ws, { timeoutMs: 8000 });
@@ -247,8 +256,13 @@ async function main() {
       const isolatedArgs = [...headlessArgs, '--disable-gpu', ...sandboxArgs, '--no-first-run', ...edgeArgs,
         ...isolatedCdpArgs, `--user-data-dir=${browserProfile}`, initialUrl];
       const isolatedChild = spawn(browser.path, isolatedArgs, { stdio: isolatedStdio });
+      const attempt = lastBrowserAttempt = {
+        browser: `${browser.name} (${browser.path})`, transport: usePipe ? 'pipe' : 'TCP', stage: 'isolated browser startup',
+        args: isolatedArgs, url: initialUrl, exit: null, stderr: ''
+      };
       const isolatedClosed = new Promise(resolve => isolatedChild.once('close', resolve));
-      isolatedChild.stderr.on('data', chunk => { childError += chunk.toString(); });
+      isolatedChild.on('exit', (code, signal) => { attempt.exit = { code, signal }; });
+      isolatedChild.stderr.on('data', chunk => { const output = chunk.toString(); childError += output; attempt.stderr += output; });
       let isolatedSocket;
       let isolatedSend;
       const networkRequests = [];
@@ -257,6 +271,7 @@ async function main() {
         assert.doesNotMatch(standaloneHtml, /<script\b[^>]*\bsrc\s*=/i, '単体HTMLが外部スクリプトを参照しています');
         assert.doesNotMatch(standaloneHtml, /<link\b[^>]*\brel\s*=\s*["']?stylesheet[^>]*\bhref\s*=/i, '単体HTMLが外部スタイルシートを参照しています');
         if (usePipe) {
+          attempt.stage = 'isolated CDP pipe handshake';
           const sendBrowser = cdpPipe(isolatedChild.stdio[3], isolatedChild.stdio[4], message => {
             if (message.method === 'Network.requestWillBeSent') networkRequests.push(message.params.request.url);
           });
@@ -266,8 +281,11 @@ async function main() {
           const { sessionId } = await sendBrowser('Target.attachToTarget', { targetId: target.targetId, flatten: true });
           isolatedSend = (method, params = {}) => sendBrowser(method, params, method.startsWith('Browser.') ? undefined : sessionId);
         } else {
+          attempt.stage = 'isolated CDP port announcement';
           const port = Number(requestedPort) || await waitForDevToolsPort(browserProfile, isolatedChild);
+          attempt.stage = 'isolated CDP target discovery';
           const target = await waitForTarget(port, initialUrl);
+          attempt.stage = 'isolated CDP WebSocket connection';
           isolatedSocket = new WebSocket(target.webSocketDebuggerUrl);
           await waitForSocketOpen(isolatedSocket);
           isolatedSend = createCdpClient(isolatedSocket, { timeoutMs: 8000 });
@@ -371,6 +389,53 @@ async function main() {
     }, { timeoutMs: 5000, intervalMs: 50, message: 'HTMLエクスポートサイズの計算が完了しません' });
     assert.match(initialExportSize, /^\d+(?:\.\d+)? (?:B|KB|MB|GB|TB)$/);
     record('起動・初期化', '対象HTMLの読み込みとDOM初期化');
+    const englishLanguageScript = await send('Page.addScriptToEvaluateOnNewDocument', { source: `Object.defineProperty(Object.getPrototypeOf(navigator), 'languages', { configurable: true, get: () => ['en-US', 'ja-JP'] }); Object.defineProperty(Object.getPrototypeOf(navigator), 'language', { configurable: true, get: () => 'en-US' });` });
+    await evaluate(`localStorage.setItem('hitohira_settings', JSON.stringify({ language: 'ja' }))`);
+    await send('Page.reload', { ignoreCache: true });
+    await waitForCondition(() => evaluate('document.documentElement.lang === "en"'), {
+      timeoutMs: 5000, intervalMs: 50, message: '保存済み言語設定よりブラウザー優先言語を反映しません'
+    });
+    assert.equal(await evaluate('document.getElementById("btn-open-settings").getAttribute("aria-label")'), 'Open settings');
+    assert.equal(await evaluate('document.getElementById("ctrl-language")'), null, '手動の表示言語選択UIが残っています');
+    await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: englishLanguageScript.identifier });
+    const japaneseLanguageScript = await send('Page.addScriptToEvaluateOnNewDocument', { source: `Object.defineProperty(Object.getPrototypeOf(navigator), 'languages', { configurable: true, get: () => ['ja-JP', 'en-US'] }); Object.defineProperty(Object.getPrototypeOf(navigator), 'language', { configurable: true, get: () => 'ja-JP' });` });
+    await send('Page.reload', { ignoreCache: true });
+    await waitForCondition(() => evaluate('document.documentElement.lang === "ja"'), {
+      timeoutMs: 5000, intervalMs: 50, message: '再起動後に変更されたブラウザー優先言語へ追従しません'
+    });
+    assert.equal(await evaluate('document.getElementById("btn-open-settings").getAttribute("aria-label")'), '設定を開く');
+    await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: japaneseLanguageScript.identifier });
+    await evaluate('localStorage.removeItem("hitohira_settings")');
+    await send('Page.reload', { ignoreCache: true });
+    await waitForCondition(() => evaluate('document.documentElement.lang === "ja" && document.getElementById("error-notice").hidden'), {
+      timeoutMs: 5000, intervalMs: 50, message: '言語テスト後に通常起動へ戻りません'
+    });
+    record('表示言語', '起動ごとにブラウザー優先言語へ追従し、保存済み言語設定を無視');
+    const recoveryKey = 'hitohira_pending_saved_data_transaction';
+    await evaluate(`localStorage.setItem('hitohira_content', '<p>RECOVERY_SENTINEL</p>'); localStorage.setItem(${JSON.stringify(recoveryKey)}, '{')`);
+    await send('Page.reload', { ignoreCache: true });
+    await waitForCondition(() => evaluate('document.readyState === "complete" && !document.getElementById("error-notice").hidden'), {
+      timeoutMs: 5000, intervalMs: 50, message: '破損した復旧マーカーを起動時に通知しません'
+    });
+    assert.ok(await evaluate('!document.getElementById("novel-content").textContent.includes("RECOVERY_SENTINEL")'),
+      '復旧失敗後に保存本文を読み込みました');
+    assert.equal(await evaluate(`localStorage.getItem(${JSON.stringify(recoveryKey)})`), '{', '復旧マーカーを消去しました');
+    record('保存・復旧', '破損した復旧マーカーで起動を止め、保存本文とマーカーを保持');
+    const validMarker = JSON.stringify({ version: 1, hasIndexedDbOperations: true });
+    await evaluate(`localStorage.setItem(${JSON.stringify(recoveryKey)}, ${JSON.stringify(validMarker)})`);
+    await send('Page.reload', { ignoreCache: true });
+    await waitForCondition(() => evaluate('document.readyState === "complete" && !document.getElementById("error-notice").hidden'), {
+      timeoutMs: 5000, intervalMs: 50, message: 'IndexedDB記録欠落を起動時に通知しません'
+    });
+    assert.ok(await evaluate('!document.getElementById("novel-content").textContent.includes("RECOVERY_SENTINEL")'),
+      'IndexedDB記録欠落後に保存本文を読み込みました');
+    assert.equal(await evaluate(`localStorage.getItem(${JSON.stringify(recoveryKey)})`), validMarker, '対応するIndexedDB記録なしで復旧マーカーを消去しました');
+    record('保存・復旧', '対応するIndexedDB記録の欠落で起動を止め、保存本文とマーカーを保持');
+    await evaluate(`localStorage.removeItem(${JSON.stringify(recoveryKey)}); localStorage.removeItem('hitohira_content')`);
+    await send('Page.reload', { ignoreCache: true });
+    await waitForCondition(() => evaluate('document.readyState === "complete" && document.getElementById("error-notice").hidden'), {
+      timeoutMs: 5000, intervalMs: 50, message: '復旧テスト後に通常起動へ戻りません'
+    });
     const defaultArticle = await evaluate('document.getElementById("novel-content").textContent.trim()');
     const defaultRanges = {
       'font-size': 16, 'line-height': 2, 'letter-spacing': 0.04, 'content-width': 720,
@@ -420,13 +485,24 @@ async function main() {
       ['ruby-scale', 'rubyScale', value => `${Math.round(value * 100)}%`],
       ['panel-bg-alpha', 'panelBgAlpha', value => `${Math.round(value * 100)}%`]
     ];
-    const setAndReadRangeBoundary = async boundary => evaluate(`(() => {
+    const setAndReadRangeBoundary = async boundary => {
+      await evaluate(`(() => {
       const ranges = ${JSON.stringify(settingRanges.map(([id, key]) => [id, key]))};
       for (const [id] of ranges) {
         const input = document.getElementById('ctrl-' + id);
         input.value = input[${JSON.stringify(boundary)}];
         input.dispatchEvent(new Event('input', { bubbles: true }));
       }
+      })()`);
+      const expected = boundary === 'min' ? rangeMinimums : rangeMaximums;
+      await waitForCondition(() => evaluate(`(() => {
+        const ranges = ${JSON.stringify(settingRanges.map(([id, key]) => [id, key]))};
+        const stored = JSON.parse(localStorage.getItem('hitohira_settings') || 'null');
+        return document.getElementById('settings-save-status').dataset.state === 'saved' && !!stored &&
+          ranges.every(([, key], index) => stored[key] === ${JSON.stringify(expected)}[index]);
+      })()`), { timeoutMs: 3000, intervalMs: 25, message: `${boundary}設定が保存済み状態になりません` });
+      return evaluate(`(() => {
+      const ranges = ${JSON.stringify(settingRanges.map(([id, key]) => [id, key]))};
       const articleStyle = getComputedStyle(document.getElementById('novel-content'));
       const rootStyle = getComputedStyle(document.documentElement);
       const saved = JSON.parse(localStorage.getItem('hitohira_settings'));
@@ -434,16 +510,19 @@ async function main() {
         values: ranges.map(([id]) => document.getElementById('ctrl-' + id).valueAsNumber),
         labels: ranges.map(([id]) => document.getElementById('val-' + id).textContent),
         stored: ranges.map(([, key]) => saved[key]),
+        saveState: document.getElementById('settings-save-status').dataset.state,
         css: ['font-size', 'line-height', 'letter-spacing', 'content-width', 'content-padding', 'background-blur', 'ruby-scale', 'panel-bg-alpha']
           .map(key => rootStyle.getPropertyValue('--' + key).trim())
       };
     })()`);
+    };
     const rangeMinimums = [10, 1, 0, 480, 16, 0, 0.3, 0];
     const rangeMaximums = [22, 3, 0.08, 960, 80, 24, 0.7, 1];
     for (const [edge, expected] of [['min', rangeMinimums], ['max', rangeMaximums]]) {
       const actual = await setAndReadRangeBoundary(edge);
       assert.deepEqual(actual.values, expected, `${edge}imum設定値を選択できません`);
       assert.deepEqual(actual.stored, expected, `${edge}imum設定値が保存されません`);
+      assert.equal(actual.saveState, 'saved', `${edge}imum設定の保存済み状態が表示されません`);
       assert.deepEqual(actual.labels, expected.map((value, index) => settingRanges[index][2](value)),
         `${edge}imum設定値と表示ラベルが一致しません`);
       assert.deepEqual(actual.css, [
@@ -463,13 +542,15 @@ async function main() {
         values: ranges.map(id => document.getElementById('ctrl-' + id).valueAsNumber),
         css: ['font-size', 'line-height', 'letter-spacing', 'content-width', 'content-padding', 'background-blur', 'ruby-scale', 'panel-bg-alpha']
           .map(key => style.getPropertyValue('--' + key).trim()),
-        resetDisabled: document.getElementById('btn-reset-all').disabled
+        resetDisabled: document.getElementById('btn-reset-all').disabled,
+        errorNotice: document.getElementById('error-notice').textContent.trim()
       };
     })()`);
     assert.deepEqual(resetRanges, {
       values: [16, 2, 0.04, 720, 48, 12, 0.5, 0.75],
       css: ['16px', '2', '0.04em', '720px', '48px', '12px', '0.5', '0.75'],
-      resetDisabled: true
+      resetDisabled: true,
+      errorNotice: ''
     }, '境界値テスト後に設定・CSSを既定状態へ戻せません');
     record('設定', '文字組み8項目の最小・最大値をUI・保存値と照合');
     const wakeStatus = await evaluate('document.getElementById("wake-lock-status").textContent');
@@ -541,8 +622,11 @@ async function main() {
       '<div><p><span class="dialogue">「本文」</span>',
       '<a href="https://example.test/" target="_blank" rel="noopener noreferrer">外部</a>',
       '<a href="../chapter.html">相対</a><a>未許可</a><img alt="画像"></p>',
-      '非対応要素内の文字</div>'
+      '</div>'
     ].join(''), 'HTML取り込み後の本文DOMがサニタイズ結果と一致しません');
+    await waitForCondition(() => evaluate('document.getElementById("file-input").value === ""'), {
+      timeoutMs: 4000, intervalMs: 50, message: 'HTML取り込みの後処理が完了しません'
+    });
     record('インポート', 'HTML取り込み後の本文DOMをサニタイズ');
     const bodyFixture = path.join(profile, 'different-stem.html');
     fs.writeFileSync(bodyFixture, [
@@ -552,7 +636,9 @@ async function main() {
       '<a href="javascript:alert(1)">危険</a>',
       '<img src="data:image/png;base64,AA==" alt="表紙" onerror="">'
     ].join(''), 'utf8');
-    await send('DOM.setFileInputFiles', { nodeId: textInput.nodeId, files: [bodyFixture] });
+    const bodyDocument = await send('DOM.getDocument', { depth: -1 });
+    const bodyInput = await send('DOM.querySelector', { nodeId: bodyDocument.root.nodeId, selector: '#file-input' });
+    await send('DOM.setFileInputFiles', { nodeId: bodyInput.nodeId, files: [bodyFixture] });
     for (let i = 0; i < 30; i++) {
       if (await evaluate('document.title === "表示題名"')) break;
       await sleep(100);
@@ -1039,6 +1125,9 @@ async function main() {
     await evaluate('document.getElementById("viewer-container").focus()');
     await dispatchKey(send, 's', 'KeyS', { text: 's' });
     assert.equal(await evaluate('document.getElementById("settings-drawer").classList.contains("is-open")'), true, 'Sで設定が開きません');
+    assert.equal(await evaluate('document.getElementById("btn-open-settings").getAttribute("aria-expanded")'), 'true');
+    assert.equal(await evaluate('document.activeElement.id'), 'settings-drawer', '設定ドロワーを開いてパネルへフォーカスしません');
+    assert.equal(await evaluate('document.getElementById("settings-drawer").getAttribute("aria-hidden")'), 'false');
     record('設定', 'Sで設定ドロワーを開く');
     await evaluate('(() => { const input = document.getElementById("ctrl-content-width"); input.value = "760"; input.dispatchEvent(new Event("input", { bubbles: true })); })()');
     assert.equal(await evaluate('document.getElementById("ctrl-content-width").value'), '760', '本文幅スライダーを操作できません');
@@ -1112,13 +1201,102 @@ async function main() {
     record('設定', '設定初期化');
 
     await evaluate('document.getElementById("viewer-container").focus()');
+    await dispatchKey(send, 'f', 'KeyF', { text: 'f', modifiers: 2, windowsVirtualKeyCode: 70 });
+    assert.equal(await evaluate('document.getElementById("search-drawer").classList.contains("is-open")'), true, 'Ctrl+Fで検索ドロワーが開きません');
+    assert.equal(await evaluate('document.getElementById("settings-drawer").classList.contains("is-open")'), false, '検索を開いたとき設定ドロワーが閉じません');
+    assert.equal(await evaluate('document.getElementById("btn-open-search").getAttribute("aria-expanded")'), 'true');
+    assert.equal(await evaluate('document.activeElement.id'), 'search-query', `検索ドロワーを開いて検索欄へフォーカスしません: ${JSON.stringify(await evaluate(`(() => { const drawer = document.getElementById('search-drawer'); return { inert: drawer.inert, ariaHidden: drawer.getAttribute('aria-hidden'), visibility: getComputedStyle(drawer).visibility, focusable: document.getElementById('search-query').tabIndex }; })()`))}`);
+    await evaluate(`(() => {
+      const article = document.getElementById('novel-content');
+      window.__searchTestOriginalContent = article.innerHTML;
+      article.innerHTML = '<h1>第一章</h1><p>章をまたぐ共通語です。</p><h1>第二章</h1><p>こちらにも共通語があります。</p>';
+      const input = document.getElementById('search-query');
+      input.value = '共通語';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    assert.equal(await evaluate('document.querySelectorAll("#search-results .search-result-button").length'), 2, '結合本文の複数章にある一致箇所を検索できません');
+    assert.deepEqual(await evaluate('[...document.querySelectorAll("#search-results .search-result-heading")].map(element => element.textContent)'), ['第一章', '第二章']);
+    await evaluate('document.querySelectorAll("#search-results .search-result-button")[1].click()');
+    assert.equal(await evaluate('document.querySelector("#novel-content .search-current-block").textContent'), 'こちらにも共通語があります。');
+    await evaluate(`(() => {
+      document.getElementById('novel-content').innerHTML = window.__searchTestOriginalContent;
+      delete window.__searchTestOriginalContent;
+      const input = document.getElementById('search-query');
+      input.value = '';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    await evaluate(`(() => {
+      const input = document.getElementById('search-query');
+      input.value = '本文';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    const searchResultCount = await evaluate('document.querySelectorAll("#search-results .search-result-button").length');
+    assert.ok(searchResultCount > 1, '複数の本文一致箇所が一覧されません');
+    assert.ok(await evaluate('!!document.querySelector("#search-results mark")'), '検索結果の一致語句が文脈内で強調されません');
+    const firstSearchResult = await evaluate('document.querySelector("#search-results .search-result-button").getAttribute("aria-label")');
+    assert.match(firstSearchResult, /本文/);
+    await evaluate('document.querySelector("#search-results .search-result-button").click()');
+    assert.equal(await evaluate('document.getElementById("search-drawer").classList.contains("is-open")'), true, '結果選択後に検索一覧が閉じています');
+    assert.equal(await evaluate('!!document.querySelector("#novel-content .search-current-block")'), true, '選択した一致箇所が本文上で強調されません');
+    assert.equal(await evaluate('document.querySelector("#search-results .search-result-button").getAttribute("aria-current")'), 'location');
+    await evaluate('document.getElementById("btn-search-next").click()');
+    assert.match(await evaluate('document.getElementById("search-result-status").textContent'), /^2 \/ /, '次の検索結果へ移動しません');
+    await evaluate(`(() => {
+      document.getElementById('search-include-body').checked = false;
+      document.getElementById('search-include-body').dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    assert.ok(await evaluate('document.querySelectorAll("#search-results [data-search-kind=heading]").length > 0'), '見出しのみの検索に一致箇所がありません');
+    assert.equal(await evaluate('document.querySelectorAll("#search-results [data-search-kind=body]").length'), 0, '見出しのみの検索へ本文の結果が混入しています');
+    await evaluate(`(() => {
+      document.getElementById('search-include-headings').checked = true;
+      document.getElementById('search-include-body').checked = true;
+      const input = document.getElementById('search-query');
+      input.value = 'ｈｉｔｏｈｉｒａ';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    assert.ok(await evaluate('document.querySelectorAll("#search-results .search-result-button").length > 0'), '全半角・英字大小を無視した検索が一致しません');
+    await evaluate(`(() => {
+      const exact = document.getElementById('search-distinguish-variants');
+      exact.checked = true;
+      exact.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    assert.equal(await evaluate('document.querySelectorAll("#search-results .search-result-button").length'), 0, '全半角・英字大小の区別が検索へ反映されません');
+    await evaluate(`(() => {
+      const article = document.getElementById('novel-content');
+      window.__searchStressOriginalContent = article.innerHTML;
+      article.innerHTML = Array.from({ length: 620 }, (_, index) => '<p>stressneedle ' + index + '</p>').join('');
+      const input = document.getElementById('search-query');
+      input.value = 'stressneedle';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    await waitForCondition(() => evaluate('document.querySelectorAll("#search-results .search-result-button").length === 500'), {
+      timeoutMs: 5000, intervalMs: 20, message: '大量本文の分割検索が500件の上限まで完了しません'
+    });
+    assert.match(await evaluate('document.getElementById("search-result-status").textContent'), /500/);
+    await evaluate(`(() => {
+      document.getElementById('novel-content').innerHTML = window.__searchStressOriginalContent;
+      delete window.__searchStressOriginalContent;
+      const input = document.getElementById('search-query');
+      input.value = '';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    await evaluate('document.getElementById("btn-close-search").click()');
+    assert.equal(await evaluate('document.getElementById("search-drawer").classList.contains("is-open")'), false, '検索ドロワーを閉じられません');
+    assert.equal(await evaluate('document.getElementById("btn-open-search").getAttribute("aria-expanded")'), 'false');
+    assert.equal(await evaluate('document.activeElement.id'), 'btn-open-settings', '閉鎖後に可視の開閉ボタンへフォーカスが戻りません');
+    record('検索', '複数結果、見出しフィルター、表記正規化、選択位置、一覧維持を確認');
+
+    await evaluate('document.getElementById("viewer-container").focus()');
     await dispatchKey(send, 'o', 'KeyO', { text: 'o' });
     assert.equal(await evaluate('document.getElementById("toc-drawer").classList.contains("is-open")'), true, 'Oで目次が開きません');
+    assert.equal(await evaluate('document.getElementById("btn-open-toc").getAttribute("aria-expanded")'), 'true');
+    assert.equal(await evaluate('document.activeElement.id'), 'toc-drawer', '目次ドロワーを開いてパネルへフォーカスしません');
     record('ドロワー・キーボード', 'Oで目次ドロワーを開く');
 
     await dispatchKey(send, 'Escape', 'Escape', { windowsVirtualKeyCode: 27 });
     assert.equal(await evaluate('document.getElementById("toc-drawer").classList.contains("is-open")'), false, 'Escapeで目次が閉じません');
     assert.equal(await evaluate('document.getElementById("settings-drawer").classList.contains("is-open")'), false, 'Escapeで設定が閉じません');
+    assert.equal(await evaluate('document.activeElement.id'), 'btn-open-settings', 'Escapeで閉じた後に可視の開閉ボタンへフォーカスが戻りません');
     record('ドロワー・キーボード', 'Escapeでドロワーを閉じる');
     const readingViewer = path.join(profile, 'reading-viewer.html');
       fs.copyFileSync(path.join(root, 'hitohira.html'), readingViewer);
@@ -1133,6 +1311,7 @@ async function main() {
     );
     await send('Page.navigate', { url: readingUrl });
     await waitForReading(`location.href === ${JSON.stringify(readingUrl)} && document.readyState === 'complete'`, '読書位置の検証用ビューアを開けません');
+    await evaluate('document.getElementById("btn-open-settings").click()');
     await evaluate('document.querySelector("#ctrl-writing-mode button[data-value=horizontal]").click()');
     await waitForReading('document.documentElement.dataset.writingMode === "horizontal"', '検証用ビューアを横書きにできません');
     await dropFile(readingDocument);
@@ -1650,7 +1829,17 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 }
 main().catch(error => {
   console.error(`[  FAILED  ] ブラウザー操作.実行 (終了コード: 1)\n  ${error.stack || error.message}`);
-  if (childExit) console.error(`  Browser exit: code=${childExit.code}, signal=${childExit.signal || 'none'}`);
-  if (childError.trim()) console.error(`  Browser stderr: ${childError.trim()}`);
+  if (lastBrowserAttempt) {
+    const diagnosis = classifyBrowserFailure(error, lastBrowserAttempt);
+    console.error(`  [原因分類] ${diagnosis.code}: ${diagnosis.cause}`);
+    console.error(`  Browser: ${lastBrowserAttempt.browser}`);
+    console.error(`  CDP: ${lastBrowserAttempt.transport} / stage=${lastBrowserAttempt.stage}`);
+    console.error(`  Target URL: ${lastBrowserAttempt.url}`);
+    console.error(`  Launch args: ${JSON.stringify(lastBrowserAttempt.args)}`);
+    const exit = lastBrowserAttempt.exit || childExit;
+    if (exit) console.error(`  Browser exit: code=${exit.code}, signal=${exit.signal || 'none'}`);
+    const stderr = (lastBrowserAttempt.stderr || childError).trim();
+    if (stderr) console.error(`  Browser stderr: ${stderr}`);
+  }
   process.exitCode = 1;
 });

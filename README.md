@@ -1,24 +1,13 @@
-<p align="center">
-  <img src="./assets/hitohira-leaf.png" alt="Hitohiraの葉アイコン" width="88">
-</p>
+[日本語](./readme/ja/README.md) | [English](./readme/en/README.md)
 
 # Hitohira
 
 小説を1つのHTMLファイルで読むための単体型ビューアです。TXT・Markdown・HTMLの読み込み、縦書き・横書き、背景メディア、目次、読書位置の保存、HTMLエクスポートに対応しています。
 
-## スクリーンショット
+A standalone novel viewer that runs from a single HTML file. It supports TXT, Markdown, and HTML imports, vertical and horizontal writing, background media, a table of contents, saved reading positions, and HTML export.
 
-<p align="center">
-  <img src="./docs/imgs/2.png" alt="目次を表示した読書画面" width="900">
-</p>
+[Hitohiraをダウンロード](https://github.com/z0w1non/Hitohira/raw/HEAD/public/hitohira.html?download=1)
 
-<p align="center">
-  <img src="./docs/imgs/1.png" alt="縦書きや書体などを調整する設定画面" width="720">
-</p>
+[Download Hitohira](https://github.com/z0w1non/Hitohira/raw/HEAD/public/hitohira.html?download=1)
 
-## ダウンロード
-
-[Hitohiraをダウンロード](https://github.com/z0w1non/Hitohira/raw/refs/heads/master/public/hitohira.html?download=1)
-
-ダウンロードしたHTMLをブラウザーで開いてください。利用時のネットワーク接続は不要です。
-
+詳しい案内とスクリーンショット：[日本語README](./readme/ja/README.md) | [English README](./readme/en/README.md)

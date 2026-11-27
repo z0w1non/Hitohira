@@ -2,15 +2,19 @@
 
 ## 保存
 
-- 設定は`localStorage`のキー`novel_viewer_settings`に保存する。
-- 本文は`novel_viewer_content`に保存する。
+- 設定は`localStorage`のキー`hitohira_settings`に保存する。
+- 設定変更はLocalStorageへの保存成功後に実行時状態と表示へ反映し、保存失敗時は直前の設定と表示を維持する。
+- 本文は`hitohira_content`に保存する。
 - 読書位置は`novel_viewer_position:<documentId>`に保存し、設定・本文から分離する。背景メディアの移動量はこの読書位置レコードに含める。
-- 実行時メディアと読み込んだテキストは、IndexedDBデータベース`novel_viewer_media_db`のバージョン1、オブジェクトストア`background_media`、キー`current`と`current_text`を使用する。
+- しおりは`hitohira_bookmarks:<documentId>`に文書単位で保存し、エクスポートHTMLへ埋め込まない。本文の置換・本文元ファイルの削除・初期化では対象文書のしおりも削除する。
+- 実行時メディアと読み込んだテキストは、IndexedDBデータベース`hitohira_media_db`のバージョン1、オブジェクトストア`background_media`、キー`current`と`current_text`を使用する。
+- LocalStorageとIndexedDBをまたぐ保存では、LocalStorageの未完了マーカーとIndexedDBの再実行記録を使う。通常版の起動時は未完了記録を復旧してから設定・本文を読む。復旧に失敗した状態で部分保存値を表示しない。
 - 初期化ボタンの状態は、初期化対象となる設定・本文・元ファイル情報を既定値と比較する。読書位置とスクロールだけの状態は除外する。
 
 ## エクスポート
 
 エクスポートHTMLは単体で完結させる。埋め込みデータだけを復元元とし、エクスポート元ページのBlob URLや外部実行時ファイルに依存させない。個別エクスポート用の元メディアBlobを保持し、画像・動画データをエクスポートデータへ埋め込む。タイトルはHTMLに`<title>`があればそれを使い、なければ読み込んだテキストのstemを使う。元テキストを削除したら既定タイトルへ戻す。
+- 埋め込みJSONの形式を変更するときはスキーマ版を更新し、版なし旧形式の読込と未知版の挙動をテストする。
 
 ## 入力とナビゲーション
 

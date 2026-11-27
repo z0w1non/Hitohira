@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { File } = require('node:buffer');
 const { webcrypto } = require('node:crypto');
-const { loadFunctionsFromHtml, formatCaseLine, assertUniqueHtmlIds, assertIconButtonsAccessible, createCdpClient, waitForCondition } = require('./test_utils');
+const { loadFunctionsFromHtml, formatCaseLine, assertUniqueHtmlIds, assertIconButtonsAccessible, classifyBrowserFailure, createCdpClient, createFakeClock, waitForCondition } = require('./test_utils');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'hitohira.html'), 'utf8');
 const spec = fs.readFileSync(path.join(__dirname, '..', 'docs', 'SPECIFICATION.md'), 'utf8');
@@ -14,13 +14,112 @@ const knowledgeTable = fs.readFileSync(path.join(__dirname, '..', 'docs', 'DEVEL
 const docsIndex = fs.readFileSync(path.join(__dirname, '..', 'docs', 'README.md'), 'utf8');
 const testingGuide = fs.readFileSync(path.join(__dirname, '..', 'docs', 'TESTING.md'), 'utf8');
 const decisions = fs.readFileSync(path.join(__dirname, '..', 'docs', 'DECISIONS.md'), 'utf8');
+const requirements = fs.readFileSync(path.join(__dirname, '..', 'docs', 'REQUIREMENTS.md'), 'utf8');
+const identifierConventions = fs.readFileSync(path.join(__dirname, '..', 'docs', 'IDENTIFIERS.md'), 'utf8');
 const testSkill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'novel-viewer-tests', 'SKILL.md'), 'utf8');
 const agents = fs.readFileSync(path.join(__dirname, '..', 'AGENTS.md'), 'utf8');
 const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
+const japaneseReadme = fs.readFileSync(path.join(__dirname, '..', 'readme', 'ja', 'README.md'), 'utf8');
+const englishReadme = fs.readFileSync(path.join(__dirname, '..', 'readme', 'en', 'README.md'), 'utf8');
 const tests = [];
 const test = (suite, name, run) => tests.push({ suite, name, run });
-const load = (start, end, names, globals) => loadFunctionsFromHtml(html, start, end, names, globals);
-const convert = () => load('function processPunctuation', 'function analyzeImageAndComputeAuto', ['plainTextToSafeHTML']).plainTextToSafeHTML;
+const localizationDictionary = JSON.parse(html.match(/<script id="viewer-localization-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+const defaultTranslate = (key, values = {}) => (localizationDictionary.ja[key] ?? key).replace(/\{([a-zA-Z]+)\}/g, (_, name) => String(values[name] ?? ''));
+const load = (names, globals = {}) => {
+  const dependencies = {
+    translate: defaultTranslate,
+    applyLanguage() {},
+    resolveBrowserLanguage: languages => [...(Array.isArray(languages) ? languages : [languages])].find(language => typeof language === 'string' && /^(?:en|ja)(?:-|$)/i.test(language))?.slice(0, 2).toLowerCase() || 'ja',
+    MEDIA_TRANSACTION_KEY: '__pending_transaction__',
+    MEDIA_STORE_KEY: 'current',
+    TEXT_STORE_KEY: 'current_text',
+    STORAGE_KEYS: {
+      SETTINGS: 'hitohira_settings', POSITION: 'hitohira_position',
+      BOOKMARKS: 'hitohira_bookmarks', CONTENT: 'hitohira_content'
+    },
+    SAVED_DATA_JOURNAL_KEY: 'hitohira_pending_saved_data_transaction',
+    SAVED_DATA_LOCK_KEY: 'hitohira_saved_data_lock',
+    SAVED_DATA_LOCK_NAME: 'hitohira_saved_data',
+    SAVED_DATA_LOCK_OWNER: 'test-owner',
+    SAVED_DATA_REVISION_KEY: 'hitohira_saved_data_revision',
+    navigator: { locks: { request: (_name, _options, operation) => operation({}) } },
+    setTimeout: (...args) => setTimeout(...args),
+    clearTimeout: (...args) => clearTimeout(...args),
+    settingsPersistence: { timer: 0, pending: null, inFlight: false, generation: 0, conflicted: false },
+    tocRenderGeneration: 0,
+    searchRenderGeneration: 0,
+    viewerResetComparableContent: null
+  };
+  Object.defineProperties(dependencies, Object.getOwnPropertyDescriptors(globals));
+  const backgroundMediaFields = {
+    dataUrl: 'backgroundMediaDataUrl', objectUrl: 'backgroundMediaObjectUrl', mediaType: 'backgroundMediaType',
+    fileBlob: 'backgroundMediaFileBlob', fileExtension: 'backgroundMediaFileExtension',
+    lastLoadedImage: 'lastLoadedImageElement', naturalWidth: 'backgroundMediaNaturalWidth',
+    naturalHeight: 'backgroundMediaNaturalHeight', offsetX: 'backgroundMediaOffsetX', offsetY: 'backgroundMediaOffsetY'
+  };
+  if (!Object.hasOwn(globals, 'backgroundMediaState')) {
+    const state = {};
+    for (const [field, legacyName] of Object.entries(backgroundMediaFields)) {
+      if (Object.hasOwn(globals, legacyName)) {
+        Object.defineProperty(state, field, {
+          get: () => dependencies[legacyName],
+          set: value => { dependencies[legacyName] = value; },
+          enumerable: true
+        });
+      }
+    }
+    dependencies.backgroundMediaState = state;
+  }
+  return loadFunctionsFromHtml(html, names, dependencies);
+};
+const convert = () => load(['plainTextToSafeHTML']).plainTextToSafeHTML;
+
+test('多言語対応', '翻訳辞書を構造化し、すべての静的UIキーと英語訳を備える', () => {
+  const dictionaryText = html.match(/<script id="viewer-localization-data" type="application\/json">([\s\S]*?)<\/script>/)?.[1];
+  assert.ok(dictionaryText, '翻訳辞書がHTML内にありません');
+  const dictionary = JSON.parse(dictionaryText);
+  assert.deepEqual(Object.keys(dictionary).sort(), ['en', 'ja']);
+  const keys = [...html.matchAll(/\bdata-i18n(?:-aria|-title|-placeholder)?="([^"]+)"/g)].map(match => match[1]);
+  keys.push(...[...html.matchAll(/\btranslate\(['"]([^'"]+)['"]/g)].map(match => match[1]));
+  for (const key of new Set(keys)) {
+    assert.ok(dictionary.ja[key], `日本語訳がありません: ${key}`);
+    assert.ok(dictionary.en[key], `英語訳がありません: ${key}`);
+  }
+  assert.equal(dictionary.en['settings.title'], 'Settings');
+});
+
+test('多言語対応', '翻訳・ブラウザー言語判定・表示言語属性を更新する', () => {
+  const dictionaryText = html.match(/<script id="viewer-localization-data" type="application\/json">([\s\S]*?)<\/script>/)[1];
+  const localizationData = JSON.parse(dictionaryText);
+  const { translate, resolveBrowserLanguage, applyLanguage } = loadFunctionsFromHtml(html, ['translate', 'resolveBrowserLanguage', 'applyLanguage'], {
+    localizationData, currentLanguage: 'en',
+    document: { documentElement: {}, querySelectorAll: () => [] }
+  });
+  assert.equal(translate('bookmark.delete', { name: 'Start' }), 'Delete bookmark "Start"');
+  assert.equal(resolveBrowserLanguage('en-US'), 'en');
+  assert.equal(resolveBrowserLanguage('ja-JP'), 'ja');
+  assert.equal(resolveBrowserLanguage(['fr-FR', 'en-US', 'ja-JP']), 'en');
+  assert.equal(resolveBrowserLanguage(['fr-FR', 'ja-JP']), 'ja');
+  assert.equal(resolveBrowserLanguage('fr'), 'ja');
+  assert.equal(resolveBrowserLanguage([]), 'ja');
+  assert.doesNotMatch(html, /id="ctrl-language"/, '表示言語の手動選択UIが残っています');
+
+  const text = { dataset: { i18n: 'settings.title' } };
+  const aria = { dataset: { i18nAria: 'settings.open' }, setAttribute(name, value) { this[name] = value; } };
+  const titled = { dataset: { i18nTitle: 'common.close' } };
+  const placeholder = { dataset: { i18nPlaceholder: 'search.placeholder' } };
+  const nodes = { '[data-i18n]': [text], '[data-i18n-aria]': [aria], '[data-i18n-title]': [titled], '[data-i18n-placeholder]': [placeholder] };
+  const target = { documentElement: {}, querySelectorAll(selector) { return nodes[selector]; } };
+  const { applyLanguage: apply } = loadFunctionsFromHtml(html, ['applyLanguage'], {
+    localizationData, currentLanguage: 'ja', document: target
+  });
+  apply('en');
+  assert.equal(target.documentElement.lang, 'en');
+  assert.equal(text.textContent, 'Settings');
+  assert.equal(aria['aria-label'], 'Open settings');
+  assert.equal(titled.title, 'Close');
+  assert.equal(placeholder.placeholder, 'Search the text');
+});
 
 test('設定', '書字方向と書体の選択状態をアクセシブルな押下状態へ同期する', () => {
   const buttons = ['horizontal', 'vertical'].map(value => ({
@@ -33,7 +132,7 @@ test('設定', '書字方向と書体の選択状態をアクセシブルな押�
     setAttribute(name, state) { this.attributes[name] = state; }
   }));
   const container = { querySelectorAll: () => buttons };
-  const { syncSegmented } = load('function syncSegmented', 'function saveSettings', ['syncSegmented']);
+  const { syncSegmented } = load(['syncSegmented']);
 
   syncSegmented(container, 'vertical');
 
@@ -53,11 +152,304 @@ test('設定', '書字方向と書体の選択状態をアクセシブルな押�
   assert.match(html, /\.icon-control-divider\s*\{[^}]*height:\s*40px/);
 });
 
+test('設定・保存データ', '設定変更は即時反映し、遅延保存の失敗状態と成功状態を通知する', async () => {
+  const settings = { theme: 'light', fontSize: 16 };
+  const writes = new Map();
+  const errors = [];
+  const rendered = [];
+  let failWrite = true;
+  let nextTimerId = 0;
+  const timers = new Map();
+  const { commitSettings } = load(['commitSettings'], {
+    activeViewerSettings: settings,
+    STORAGE_KEYS: { SETTINGS: 'settings' },
+    setTimeout(callback, delay) { const id = ++nextTimerId; timers.set(id, { callback, delay }); return id; },
+    clearTimeout(id) { timers.delete(id); },
+    localStorage: { setItem(key, value) {
+      if (failWrite) throw new Error('保存拒否');
+      writes.set(key, value);
+    } },
+    reportLocalStorageWrite(key, error) { errors.push([key, error.message]); },
+    confirmLocalStorageWrite() {},
+    scheduleHtmlExportSizeUpdate() {},
+    applySettings(value) { rendered.push({ ...value }); }
+  });
+
+  commitSettings({ fontSize: 20 }, { preserveReadingPosition: false, refreshReadingState: false });
+  assert.deepEqual(settings, { theme: 'light', fontSize: 20 });
+  assert.deepEqual(rendered, [{ theme: 'light', fontSize: 20 }]);
+  const failedTimer = [...timers.values()][0];
+  assert.equal(failedTimer.delay, 250);
+  timers.clear();
+  await failedTimer.callback();
+  assert.deepEqual(errors, [['settings', '保存拒否']]);
+
+  failWrite = false;
+  commitSettings({ fontSize: 21 }, { preserveReadingPosition: false, refreshReadingState: false });
+  const savedTimer = [...timers.values()][0];
+  timers.clear();
+  await savedTimer.callback();
+  assert.deepEqual(settings, { theme: 'light', fontSize: 21 });
+  assert.deepEqual(JSON.parse(writes.get('settings')), settings);
+  assert.deepEqual(rendered.at(-1), settings);
+});
+
+test('設定・保存データ', '別タブの保存変更を検知した後は設定と本文の上書きを停止する', async () => {
+  const settings = { theme: 'light', fontSize: 16 };
+  const notices = [];
+  const persistence = { timer: 0, pending: null, inFlight: false, generation: 0, conflicted: false };
+  const { handleExternalSavedDataChange, commitSettings, commitSavedData } = load(
+    ['handleExternalSavedDataChange', 'commitSettings', 'commitSavedData'], {
+      settingsPersistence: persistence,
+      activeViewerSettings: settings,
+      STORAGE_KEYS: { SETTINGS: 'settings', CONTENT: 'content', BOOKMARKS: 'bookmarks' },
+      clearTimeout() {},
+      showErrorNotice(message) { notices.push(message); },
+      applySettings() { throw new Error('競合後に設定が描画されました'); }
+    });
+
+  handleExternalSavedDataChange({ key: 'settings' });
+  commitSettings({ fontSize: 22 }, { preserveReadingPosition: false, refreshReadingState: false });
+  assert.equal(await commitSavedData([['content', '<p>stale write</p>']]), false);
+  handleExternalSavedDataChange({ key: 'hitohira_saved_data_revision' });
+
+  assert.equal(persistence.conflicted, true);
+  assert.deepEqual(settings, { theme: 'light', fontSize: 16 });
+  assert.equal(notices.length, 2);
+});
+
+test('設定・保存データ', 'ページ離脱時に保留中の設定を同期的に書き出す', () => {
+  const persistence = {
+    timer: 7, pending: JSON.stringify({ theme: 'dark', fontSize: 19 }),
+    inFlight: false, generation: 0, conflicted: false
+  };
+  const pendingValue = persistence.pending;
+  const writes = [];
+  const cleared = [];
+  const confirmations = [];
+  const status = { dataset: {}, textContent: '' };
+  const { flushPendingSettingsSynchronously } = load(['flushPendingSettingsSynchronously'], {
+    settingsPersistence: persistence,
+    STORAGE_KEYS: { SETTINGS: 'settings' },
+    settingsSaveStatusEl: status,
+    localStorage: { setItem(key, value) { writes.push([key, value]); } },
+    confirmLocalStorageWrite(key) { confirmations.push(key); },
+    clearTimeout(id) { cleared.push(id); }
+  });
+
+  flushPendingSettingsSynchronously();
+
+  assert.deepEqual(writes, [['settings', pendingValue]]);
+  assert.deepEqual(confirmations, ['settings']);
+  assert.deepEqual(cleared, [7]);
+  assert.equal(persistence.pending, null);
+  assert.equal(status.dataset.state, 'saved');
+});
+
+test('設定・保存データ', 'Web Locksの空き待ちは取得可能になるまで再試行し、操作を一度だけ実行する', async () => {
+  let requests = 0;
+  let operations = 0;
+  let waits = 0;
+  const { withSavedDataLock } = load(['withSavedDataLock'], {
+    navigator: { locks: { async request(name, options, callback) {
+      assert.equal(name, 'hitohira_saved_data');
+      assert.equal(options.mode, 'exclusive');
+      assert.equal(options.ifAvailable, true);
+      requests += 1;
+      return callback(requests === 1 ? null : {});
+    } } },
+    setTimeout(callback) { waits += 1; callback(); return waits; }
+  });
+
+  const value = await withSavedDataLock(() => { operations += 1; return 'saved'; });
+
+  assert.equal(value, 'saved');
+  assert.equal(requests, 2);
+  assert.equal(waits, 1);
+  assert.equal(operations, 1);
+});
+
+test('本文検索', '全半角・英字大小を同一視する場合も元本文の位置で全一致箇所を返す', () => {
+  const { findTextMatches } = load(['findTextMatches']);
+  const text = 'ＡＢＣ abc ｶﾅ';
+  assert.deepEqual(JSON.parse(JSON.stringify(findTextMatches(text, 'abc', true))), [
+    { start: 0, end: 3 }, { start: 4, end: 7 }
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(findTextMatches(text, 'カナ', true))), [{ start: 8, end: 10 }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(findTextMatches('ｶﾞ', 'ガ', true))), [{ start: 0, end: 2 }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(findTextMatches(text, 'abc', false))), [{ start: 4, end: 7 }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(findTextMatches(text, '', true))), []);
+});
+
+test('本文検索', '分割検索中に検索語が変わったら古い検索結果を表示しない', async () => {
+  const timers = [];
+  const makeNode = tagName => ({
+    tagName: String(tagName || '').toUpperCase(), textContent: '', children: [], dataset: {}, attributes: {},
+    classList: { add() {}, remove() {}, toggle() {} },
+    querySelector() { return null; },
+    appendChild(child) { this.children.push(child); },
+    append(...children) { this.children.push(...children); },
+    addEventListener() {},
+    setAttribute(name, value) { this.attributes[name] = value; },
+    removeAttribute(name) { delete this.attributes[name]; }
+  });
+  const blocks = Array.from({ length: 250 }, (_, index) => ({
+    tagName: 'P', textContent: index < 100 ? `alpha ${index}` : `beta ${index}`,
+    querySelector() { return null; }, classList: { add() {}, remove() {} }, scrollIntoView() {}
+  }));
+  const resultList = {
+    children: [],
+    replaceChildren(fragment) { this.children = fragment ? fragment.children.slice() : []; }
+  };
+  const status = { textContent: '' };
+  const previous = { disabled: false };
+  const next = { disabled: false };
+  const query = { value: 'alpha' };
+  const { renderSearchResults } = load(['renderSearchResults', 'findTextMatches', 'normalizeSearchText'], {
+    novelContentElement: { querySelectorAll: () => blocks },
+    searchQueryInput: query,
+    searchIncludeHeadings: { checked: false }, searchIncludeBody: { checked: true },
+    searchDistinguishVariants: { checked: false }, searchResultList: resultList,
+    searchResultStatus: status, btnSearchPrevious: previous, btnSearchNext: next,
+    activeSearchElement: null, activeSearchResultIndex: -1, searchResults: [],
+    setSearchResultStatus(text) { status.textContent = text; },
+    clearActiveSearchBlock() {}, selectSearchResult() {}, reportNavigationDuration() {},
+    maxSearchResults: 500,
+    setTimeout(callback) { timers.push(callback); return timers.length; },
+    document: {
+      createDocumentFragment: () => makeNode('fragment'),
+      createElement: tagName => makeNode(tagName),
+      createTextNode: text => ({ textContent: text })
+    }
+  });
+
+  renderSearchResults();
+  assert.equal(status.textContent, '計算中');
+  query.value = 'beta';
+  renderSearchResults();
+  while (timers.length) {
+    timers.shift()();
+    await Promise.resolve();
+  }
+
+  assert.equal(resultList.children.length, 150);
+  assert.ok(resultList.children.every(item => item.children[0].attributes['aria-label'].includes('beta')));
+  assert.equal(status.textContent, '150件');
+  assert.equal(previous.disabled, false);
+  assert.equal(next.disabled, false);
+});
+
+test('本文検索', '検索ボタン・検索語・結果一覧と対象フィルターを備える', () => {
+  assert.match(html, /id="btn-open-search"[^>]*aria-label="本文を検索"/);
+  const settingsHeaderActions = html.slice(html.indexOf('<div class="drawer-header-actions">'), html.indexOf('</div>', html.indexOf('<div class="drawer-header-actions">')));
+  assert.match(settingsHeaderActions, /id="btn-open-toc"[\s\S]*id="btn-open-search"[\s\S]*id="btn-close-settings"/);
+  assert.doesNotMatch(html.slice(0, html.indexOf('<aside id="settings-drawer"')), /id="btn-open-search"/);
+  assert.match(html, /id="search-drawer"[^>]*aria-label="検索"/);
+  const searchDrawer = html.slice(html.indexOf('<aside id="search-drawer"'), html.indexOf('</aside>', html.indexOf('<aside id="search-drawer"')));
+  assert.match(searchDrawer, /<span class="drawer-title" data-i18n="search\.title">検索<\/span>/);
+  assert.match(searchDrawer, /id="search-query"[^>]*type="search"[^>]*aria-label="本文を検索"/);
+  assert.doesNotMatch(searchDrawer, /検索語|検索語を入力/);
+  assert.match(html, /id="search-include-headings"[^>]*type="checkbox" checked/);
+  assert.match(html, /id="search-include-body"[^>]*type="checkbox" checked/);
+  assert.match(searchDrawer, /class="search-variant-toggle" title="英字大小・全半角を区別"[\s\S]*id="search-distinguish-variants"[^>]*aria-label="英字大小・全半角を区別"[\s\S]*<svg[^>]*aria-hidden="true"><text[^>]*>Aa<\/text><text[^>]*>ＡＡ<\/text>/);
+  assert.match(html, /<ol id="search-results"[^>]*aria-label="検索結果一覧"/);
+  assert.match(html, /id="btn-search-previous"[^>]*aria-label="前の検索結果へ"[^>]*>[\s\S]*?<svg[^>]*aria-hidden="true"/);
+  assert.match(html, /id="btn-search-next"[^>]*aria-label="次の検索結果へ"[^>]*>[\s\S]*?<svg[^>]*aria-hidden="true"/);
+  assert.match(html, /\.search-result-navigation \.action-btn svg\s*\{[^}]*stroke:\s*currentColor/);
+  assert.match(html, /\.search-result-navigation \.action-btn\s*\{[^}]*place-items:\s*center[^}]*justify-content:\s*center/);
+  assert.match(html, /\.search-result-navigation \.action-btn svg\s*\{[^}]*justify-self:\s*center[^}]*align-self:\s*center/);
+  assert.match(html, /\.search-filter-navigation\s*\{[^}]*display:\s*flex/);
+  assert.match(searchDrawer, /class="search-filter-navigation"[\s\S]*class="search-filter-group"[\s\S]*id="search-result-status"[\s\S]*class="search-result-navigation"[^>]*aria-label="検索結果の移動"[\s\S]*id="btn-search-previous"[\s\S]*id="btn-search-next"/);
+  assert.match(html, /\.search-result-navigation\s*\{[^}]*width:\s*76px[^}]*height:\s*76px/);
+  assert.match(html, /\.search-result-navigation\s*\{[^}]*grid-template-areas:\s*"previous"\s*"next"/);
+  assert.match(html, /html\[data-writing-mode="vertical"\] \.search-result-navigation\s*\{[^}]*grid-template-areas:\s*"next previous"/);
+  assert.match(html, /html\[data-writing-mode="vertical"\] #btn-search-previous svg,[\s\n]*html\[data-writing-mode="vertical"\] #btn-search-next svg\s*\{[^}]*transform:\s*rotate\(90deg\)/);
+});
+
+test('目次・しおり', 'しおり名・保存一覧と文書別保存キーを用意する', () => {
+  assert.match(html, /id="bookmark-name"[^>]*maxlength="80"/);
+  assert.match(html, /id="btn-add-bookmark"[^>]*aria-label="現在位置にしおりを追加"[^>]*>[\s\S]*?<svg[^>]*viewBox="0 0 24 24"/);
+  assert.match(html, /class="bookmark-controls"[\s\S]*id="bookmark-name"[\s\S]*id="btn-add-bookmark"/);
+  assert.match(html, /class="bookmark-heading-icon"[^>]*role="img" aria-label="保存したしおり"/);
+  assert.match(html, /id="bookmark-list"[^>]*aria-label="保存したしおり"/);
+  assert.match(html, /remove\.className = 'bookmark-delete'/);
+  assert.match(html, /deleteIcon\.setAttribute\('viewBox', '0 0 24 24'\)/);
+  assert.match(html, /deletePath\.setAttribute\('d', '[^']*'\)/);
+  assert.match(html, /clonedDoc\.querySelector\('#bookmark-list'\)\?\.replaceChildren\(\)/);
+  assert.match(html, /BOOKMARKS:\s*'hitohira_bookmarks'/);
+  assert.match(html, /getBookmarksStorageKey\s*=\s*\(\)\s*=>\s*`\$\{STORAGE_KEYS\.BOOKMARKS\}:\$\{currentDocumentId\}`/);
+});
+
+test('目次・しおり', 'しおりは読書状態を保存し、文書別に復元・削除して失敗を通知する', () => {
+  const values = new Map();
+  const messages = [];
+  const context = {
+    localStorage: {
+      getItem: key => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value)
+    },
+    getBookmarksStorageKey: () => 'bookmarks:first',
+    captureReadingPosition: () => ({ scrollTop: 220, headingId: 'chapter-2' }),
+    restoreReadingPosition: position => { context.restoredPosition = position; },
+    closeAllDrawers: () => { context.closed = true; },
+    bookmarkListEl: {
+      children: [],
+      replaceChildren() { this.children = []; },
+      appendChild(element) { this.children.push(element); }
+    },
+    bookmarkNameInput: { value: '' },
+    document: {
+      createElement: tag => ({ tag, children: [], attributes: {}, className: '', textContent: '',
+        setAttribute(name, value) { this.attributes[name] = value; },
+        addEventListener(name, callback) { this[name] = callback; },
+        append(...elements) { this.children.push(...elements); },
+        appendChild(element) { this.children.push(element); }
+      }),
+      createElementNS: (namespace, tag) => ({ namespace, tag, children: [], attributes: {},
+        setAttribute(name, value) { this.attributes[name] = value; },
+        appendChild(element) { this.children.push(element); }
+      })
+    },
+    console: { warn() {} },
+    confirmLocalStorageWrite() {},
+    reportLocalStorageWrite(key, error) { messages.push([key, error.message]); }
+  };
+  const { addBookmark, readBookmarks, renderBookmarks } = load(['addBookmark', 'readBookmarks', 'renderBookmarks'], context);
+
+  context.bookmarkNameInput.value = '  続きから読む  ';
+  const dependencies = { now: () => 1234, random: () => 0.5, formatTimestamp: () => '2026/11/27 12:00' };
+  assert.equal(addBookmark(context.bookmarkNameInput.value, null, dependencies), true);
+  assert.equal(context.bookmarkNameInput.value, '');
+  assert.deepEqual(JSON.parse(JSON.stringify(readBookmarks())), [{
+    id: '1234-i', name: '続きから読む', position: { scrollTop: 220, headingId: 'chapter-2' }
+  }]);
+  renderBookmarks();
+  const [row] = context.bookmarkListEl.children;
+  row.children[0].click();
+  assert.deepEqual(JSON.parse(JSON.stringify(context.restoredPosition)), { scrollTop: 220, headingId: 'chapter-2' });
+  assert.equal(context.closed, true);
+  row.children[1].click();
+  assert.equal(row.children[1].children[0].tag, 'svg');
+  assert.equal(row.children[1].attributes['aria-label'], 'しおり「続きから読む」を削除');
+  assert.deepEqual(JSON.parse(JSON.stringify(readBookmarks())), []);
+
+  values.set('bookmarks:first', '{');
+  assert.throws(() => readBookmarks(), /JSON/);
+  assert.equal(addBookmark('破損時に上書きしない', null, dependencies), false);
+  assert.equal(values.get('bookmarks:first'), '{');
+  context.localStorage.setItem = () => { throw new Error('容量不足'); };
+  values.set('bookmarks:first', '[]');
+  assert.equal(addBookmark('保存できない', null, dependencies), false);
+  assert.equal(messages.at(-1)[0], 'bookmarks:first');
+  assert.equal(messages.at(-1)[1], '容量不足');
+});
+
 test('ブラウザー操作基盤', 'CDP応答が止まった場合に期限で失敗し、切断時は保留要求をすぐ解除する', async () => {
   const socket = new EventTarget();
   socket.send = () => {};
-  const send = createCdpClient(socket, { timeoutMs: 30 });
-  await assert.rejects(send('Runtime.evaluate'), /CDP応答タイムアウト.*Runtime\.evaluate/);
+  const clock = createFakeClock();
+  const send = createCdpClient(socket, { timeoutMs: 30, clock });
+  await assert.rejects(clock.runUntil(send('Runtime.evaluate')), /CDP応答タイムアウト.*Runtime\.evaluate/);
 
   const pending = send('Page.enable');
   socket.dispatchEvent(new Event('close'));
@@ -65,19 +457,36 @@ test('ブラウザー操作基盤', 'CDP応答が止まった場合に期限で�
   await assert.rejects(send('Network.enable'), /CDP接続が閉じました/);
 });
 
-test('ブラウザー操作基盤', '状態ポーリングは条件成立時に早く終わり、期限を超えると理由を示す', async () => {
+test('ブラウザー操作基盤', 'ブラウザー起動・CDP接続の失敗を原因別に分類する', () => {
+  assert.equal(classifyBrowserFailure(new Error('fetch failed (EACCES)'), { transport: 'TCP', stage: 'CDP target discovery' }).code,
+    'CDP_LOOPBACK_DENIED');
+  assert.equal(classifyBrowserFailure(new Error('ブラウザーがCDPポート通知前に終了しました (code=1)'), {
+    transport: 'TCP', stage: 'port announcement', stderr: 'crash server failed to launch, self-terminating'
+  }).code, 'BROWSER_CRASHPAD_STARTUP');
+  assert.equal(classifyBrowserFailure(new Error('CDPターゲットを取得できません (port=1234)'), { transport: 'TCP' }).code,
+    'CDP_TARGET_UNAVAILABLE');
+  assert.equal(classifyBrowserFailure(new Error('CDP WebSocket接続がタイムアウトしました'), { transport: 'TCP' }).code,
+    'CDP_WEBSOCKET_FAILED');
+  assert.equal(classifyBrowserFailure(new Error('CDPパイプが応答しません'), { transport: 'pipe' }).code,
+    'CDP_PIPE_FAILED');
+});
+
+test('ブラウザー操作基盤', '状態ポーリングは注入時計で条件成立・期限終了を待たずに検証する', async () => {
+  const clock = createFakeClock();
   let attempts = 0;
-  const value = await waitForCondition(async () => ++attempts === 3, {
-    timeoutMs: 500, intervalMs: 1, message: 'テスト条件が成立しません'
-  });
+  const value = await clock.runUntil(waitForCondition(async () => ++attempts === 3, {
+    timeoutMs: 500, intervalMs: 1, message: 'テスト条件が成立しません', clock
+  }));
   assert.equal(value, true);
   assert.equal(attempts, 3);
-  await assert.rejects(waitForCondition(() => false, {
-    timeoutMs: 10, intervalMs: 1, message: '状態待ちがタイムアウトしました'
-  }), /状態待ちがタイムアウトしました/);
-  await assert.rejects(waitForCondition(() => new Promise(() => {}), {
-    timeoutMs: 10, message: '状態確認の応答自体が停止しました'
-  }), /状態確認の応答自体が停止しました/);
+  const timeoutClock = createFakeClock();
+  await assert.rejects(timeoutClock.runUntil(waitForCondition(() => false, {
+    timeoutMs: 10, intervalMs: 1, message: '状態待ちがタイムアウトしました', clock: timeoutClock
+  })), /状態待ちがタイムアウトしました/);
+  const stalledClock = createFakeClock();
+  await assert.rejects(stalledClock.runUntil(waitForCondition(() => new Promise(() => {}), {
+    timeoutMs: 10, message: '状態確認の応答自体が停止しました', clock: stalledClock
+  })), /状態確認の応答自体が停止しました/);
 });
 
 test('テスト基盤', '課題表には完了条件を持つ未解決行だけが優先度順で並ぶ', () => {
@@ -95,7 +504,7 @@ test('テスト基盤', '課題表には完了条件を持つ未解決行だけ�
     const [id, priority, status] = row;
     assert.equal(row.length, header.length, id);
     assert.ok(row.every(Boolean), id);
-    assert.match(id, /^NV-\d+$/);
+    assert.match(id, /^ISS-\d{3,}$/);
     assert.ok(!ids.has(id), `課題IDが重複しています: ${id}`);
     ids.add(id);
     assert.match(priority, /^P[012]$/);
@@ -121,7 +530,7 @@ test('テスト基盤', '開発知見表の列・ID・根拠・適用範囲・�
   for (const entry of entries) {
     assert.equal(entry.length, header.length);
     assert.ok(entry.every(Boolean), entry[0]);
-    assert.match(entry[0], /^K-\d{3}$/);
+    assert.match(entry[0], /^KNW-\d{3,}$/);
     assert.ok(!ids.has(entry[0]), `知見IDが重複しています: ${entry[0]}`);
     ids.add(entry[0]);
     assert.match(entry[1], /^\d{4}-\d{2}-\d{2}$/);
@@ -151,7 +560,7 @@ test('テスト基盤', '設計決定表に判断理由・影響・再検討条�
   for (const entry of entries) {
     assert.equal(entry.length, header.length);
     assert.ok(entry.every(Boolean), entry[0]);
-    assert.match(entry[0], /^ADR-\d{3}$/);
+    assert.match(entry[0], /^ADR-\d{3,}$/);
     assert.ok(!ids.has(entry[0]), `設計決定IDが重複しています: ${entry[0]}`);
     ids.add(entry[0]);
     assert.match(entry[2], /^(採用|廃止)$/);
@@ -162,6 +571,16 @@ test('テスト基盤', '設計決定表に判断理由・影響・再検討条�
   }
   assert.ok(agents.includes('./docs/DECISIONS.md'));
 });
+test('テスト基盤', '要求IDと資料別接頭辞が共通採番規則に従う', () => {
+  const requirementIds = [...requirements.matchAll(/^### (REQ-\d{3,}) /gm)].map(match => match[1]);
+  assert.ok(requirementIds.length > 0, '宣言的要求がありません');
+  assert.equal(new Set(requirementIds).size, requirementIds.length, '要求IDが重複しています');
+  for (const [kind, prefix] of [['宣言的要求', 'REQ'], ['未解決課題', 'ISS'], ['再利用可能な知見', 'KNW'], ['設計決定', 'ADR']]) {
+    assert.ok(identifierConventions.includes('| ' + kind + ' | `' + prefix + '` |'), `${prefix}の種別接頭辞が登録されていません`);
+  }
+  assert.match(identifierConventions, /削除・置換後も番号を再利用しない/);
+  assert.ok(agents.includes('./docs/IDENTIFIERS.md'));
+});
 test('テスト基盤', 'テスト後の副作用を成否に関わらず除去する方針がある', () => {
   assert.ok(testSkill.includes('成否・例外・中断に関わらず環境を復元する'));
   assert.ok(agents.includes('成否や例外に関わらず'));
@@ -171,7 +590,16 @@ test('テスト基盤', '製品の実行時ネットワーク不要方針が仕�
   assert.ok(spec.includes('実行時にネットワーク接続を要求しない'));
 });
 test('公開用配布', 'GitHubのREADMEから公開HTMLを直接ダウンロードする', () => {
-  assert.match(readme, /\[Hitohiraをダウンロード\]\(https:\/\/github\.com\/z0w1non\/Hitohira\/raw\/refs\/heads\/master\/public\/hitohira\.html\?download=1\)/);
+  assert.match(readme, /\[Hitohiraをダウンロード\]\(https:\/\/github\.com\/z0w1non\/Hitohira\/raw\/HEAD\/public\/hitohira\.html\?download=1\)/);
+  const downloadLink = /\]\(https:\/\/github\.com\/z0w1non\/Hitohira\/raw\/HEAD\/public\/hitohira\.html\?download=1\)/;
+  assert.match(readme.split(/\r?\n/)[0], /^\[日本語\]\(\.\/readme\/ja\/README\.md\) \| \[English\]\(\.\/readme\/en\/README\.md\)$/);
+  assert.match(japaneseReadme.split(/\r?\n/)[0], /^\[日本語\]\(\.\/README\.md\) \| \[English\]\(\.\.\/en\/README\.md\)$/);
+  assert.match(englishReadme.split(/\r?\n/)[0], /^\[日本語\]\(\.\.\/ja\/README\.md\) \| \[English\]\(\.\/README\.md\)$/);
+  assert.match(japaneseReadme, downloadLink);
+  assert.match(englishReadme, downloadLink);
+  assert.match(englishReadme, /\[Download Hitohira\]/);
+  assert.match(japaneseReadme, /スクリーンショット/);
+  assert.match(englishReadme, /Screenshots/);
   assert.doesNotMatch(readme, /\]\(\.\/public\/hitohira\.html\)/);
   assert.ok(fs.existsSync(path.join(__dirname, '..', 'public', 'hitohira.html')));
   assert.notEqual(path.resolve(__dirname, '..', 'hitohira.html'), path.resolve(__dirname, '..', 'public', 'hitohira.html'));
@@ -184,42 +612,64 @@ test('画面構成', '静的なUIのIDは一意で、アイコンボタンに操
   assertIconButtonsAccessible(markup);
 });
 
-test('画面構成・ドロワー', '設定と目次を切り替えると常に一方だけが開き、閉鎖ですべて閉じる', () => {
+test('画面構成・ドロワー', '設定・目次・検索を切り替えると常に一つだけが開き、閉鎖ですべて閉じる', () => {
   const makePanel = () => {
     const classes = new Set();
-    return { classes, classList: {
+    const attributes = {};
+    return { classes, attributes, inert: true, focused: 0, focus() { this.focused++; }, setAttribute(name, value) { attributes[name] = value; }, classList: {
       add: name => classes.add(name), remove: name => classes.delete(name),
       contains: name => classes.has(name)
     } };
   };
   const settingsDrawer = makePanel();
   const tocDrawer = makePanel();
+  const searchDrawer = makePanel();
+  const makeTrigger = () => ({ attributes: {}, focused: 0, setAttribute(name, value) { this.attributes[name] = value; }, focus() { this.focused++; } });
+  const btnOpenSettings = makeTrigger();
+  const btnOpenToc = makeTrigger();
+  const btnOpenSearch = makeTrigger();
   let scrolled = 0;
   const currentButton = { scrollIntoView: () => { scrolled++; } };
-  const { openSettingsDrawer, openTocDrawer, closeAllDrawers } = load(
-    'function openSettingsDrawer()', 'function getPageScrollDelta',
-    ['openSettingsDrawer', 'openTocDrawer', 'closeAllDrawers'], {
-      settingsDrawer, tocDrawer,
+  const { openSettingsDrawer, openTocDrawer, openSearchDrawer, closeAllDrawers } = load(
+    ['openSettingsDrawer', 'openTocDrawer', 'openSearchDrawer', 'closeAllDrawers'], {
+      settingsDrawer, tocDrawer, searchDrawer, btnOpenSettings, btnOpenToc, btnOpenSearch, renderSearchResults() {},
+      searchQueryInput: { focus() {}, value: '', setSelectionRange() {} },
       tocListEl: { querySelector: () => currentButton }
     });
 
   openSettingsDrawer();
   assert.equal(settingsDrawer.classList.contains('is-open'), true);
   assert.equal(tocDrawer.classList.contains('is-open'), false);
+  assert.equal(searchDrawer.classList.contains('is-open'), false);
+  assert.equal(btnOpenSettings.attributes['aria-expanded'], 'true');
+  assert.equal(settingsDrawer.attributes['aria-hidden'], 'false');
+  assert.equal(settingsDrawer.inert, false);
   openTocDrawer();
   assert.equal(settingsDrawer.classList.contains('is-open'), false);
   assert.equal(tocDrawer.classList.contains('is-open'), true);
+  assert.equal(searchDrawer.classList.contains('is-open'), false);
   assert.equal(scrolled, 1);
+  assert.equal(btnOpenSettings.attributes['aria-expanded'], 'false');
+  assert.equal(btnOpenToc.attributes['aria-expanded'], 'true');
+  assert.equal(settingsDrawer.inert, true);
+  openSearchDrawer();
+  assert.equal(settingsDrawer.classList.contains('is-open'), false);
+  assert.equal(tocDrawer.classList.contains('is-open'), false);
+  assert.equal(searchDrawer.classList.contains('is-open'), true);
+  assert.equal(btnOpenSearch.attributes['aria-expanded'], 'true');
   closeAllDrawers();
   assert.equal(settingsDrawer.classList.contains('is-open'), false);
   assert.equal(tocDrawer.classList.contains('is-open'), false);
+  assert.equal(searchDrawer.classList.contains('is-open'), false);
+  assert.equal(btnOpenSearch.attributes['aria-expanded'], 'false');
+  assert.equal(btnOpenSearch.focused, 1);
 });
 
 test('画面構成・ヘルプモーダル', 'モーダル表示中は背景ドラッグを開始せず、閉じると再開できる', () => {
   const visible = new Set();
   let updates = 0;
   const shortcutModal = { open: true };
-  const { startDrag } = load('let isDraggingBg = false', 'function moveDrag', ['startDrag'], {
+  const { startDrag } = load(['startDrag'], {
     shortcutModal, backgroundMediaDataUrl: 'data:image/png;base64,AA==',
     backgroundMediaOffsetX: 0, backgroundMediaOffsetY: 0,
     bgViewportIndicator: { classList: { add: value => visible.add(value) } },
@@ -242,8 +692,20 @@ test('エクスポートHTML', '開発用HTMLは通常版だけを書き出す',
   assert.match(html, /const exportFileName = `\$\{fileStem\}\.html`/);
 });
 
+test('エクスポートHTML・セキュリティ', 'ユーザー由来JSONをscript要素へ埋めてもHTMLタグとして解釈されない', () => {
+  const { serializeEmbeddedJson } = load(['serializeEmbeddedJson']);
+  const value = { title: '</script><script>alert(1)</script>', media: 'data:image/svg+xml,<svg></svg>' };
+  const serialized = serializeEmbeddedJson(value);
+  assert.doesNotMatch(serialized, /<|>|&|\u2028|\u2029/);
+  assert.equal(JSON.parse(serialized).title, value.title);
+  assert.equal(JSON.parse(serialized).media, value.media);
+  assert.match(html, /configScript\.textContent = '[^']*' \+ serializeEmbeddedJson\(activeViewerSettings, 2\)/);
+  assert.match(html, /createEmbeddedResetDefaults\(resetData\.settings, resetData\.content\)/);
+  assert.match(html, /downloadData\.textContent = serializeEmbeddedJson\(createEmbeddedDownloadData/);
+});
+
 test('エクスポート', 'ファイルサイズを簡潔な十進単位で整形する', () => {
-  const { formatFileSize } = load('function formatFileSize', 'function updateExportFileSize', ['formatFileSize']);
+  const { formatFileSize } = load(['formatFileSize']);
   assert.equal(formatFileSize(5), '5 B');
   assert.equal(formatFileSize(1200), '1.2 KB');
   assert.equal(formatFileSize(5_000_000), '5 MB');
@@ -255,7 +717,7 @@ test('エクスポート', 'HTML生成サイズ表示の更新を遅延し連続
   const pending = new Map();
   let nextId = 0;
   let textContent = '';
-  const { scheduleHtmlExportSizeUpdate } = load('let htmlExportSizeUpdateToken', 'async function updateHtmlExportSize', ['scheduleHtmlExportSizeUpdate'], {
+  const { scheduleHtmlExportSizeUpdate } = load(['scheduleHtmlExportSizeUpdate', 'htmlExportSizeTimer'], {
     document: { getElementById: () => ({ set textContent(value) { textContent = value; }, get textContent() { return textContent; } }) },
     setTimeout(callback, delay) { const id = ++nextId; pending.set(id, { callback, delay }); return id; },
     clearTimeout(id) { pending.delete(id); }
@@ -345,16 +807,18 @@ test('本文表示・インポート', '本文中のHTMLタグを文字として
 });
 
 test('本文表示・インポート', 'リンクと画像の許可URLだけを通し、危険スキームを拒否する', () => {
-  const { isAllowedResourceUrl } = load('function isAllowedResourceUrl', 'function sanitizeHTML', ['isAllowedResourceUrl']);
+  const { isAllowedResourceUrl } = load(['isAllowedResourceUrl']);
   assert.equal(isAllowedResourceUrl('https://example.test/a', 'href'), true);
   assert.equal(isAllowedResourceUrl('../chapter.md', 'href'), true);
   assert.equal(isAllowedResourceUrl('javascript:alert(1)', 'href'), false);
   assert.equal(isAllowedResourceUrl('data:image/png;base64,AA==', 'image'), true);
+  assert.equal(isAllowedResourceUrl('https://tracker.example/pixel.png', 'image'), false);
+  assert.equal(isAllowedResourceUrl('../outside.png', 'image'), false);
   assert.equal(isAllowedResourceUrl('data:text/html;base64,AA==', 'image'), false);
 });
 
 test('本文表示・インポート', 'サニタイズ属性は許可された識別子・クラス・媒体属性だけを残す', () => {
-  const { isAllowedSanitizedAttribute } = load('function isAllowedResourceUrl', 'function sanitizeHTML', ['isAllowedSanitizedAttribute']);
+  const { isAllowedSanitizedAttribute } = load(['isAllowedSanitizedAttribute']);
   assert.equal(isAllowedSanitizedAttribute('h2', 'id', 'heading-2'), true);
   assert.equal(isAllowedSanitizedAttribute('span', 'class', 'dialogue'), true);
   assert.equal(isAllowedSanitizedAttribute('span', 'style', 'color:red'), false);
@@ -362,7 +826,22 @@ test('本文表示・インポート', 'サニタイズ属性は許可された�
   assert.equal(isAllowedSanitizedAttribute('img', 'alt', '背景'), true);
 });
 
-const readText = () => load('function getFileExtension', 'function refreshExportButtons', ['readTextFile'], { TextDecoder }).readTextFile;
+test('本文表示・インポート・セキュリティ', '未許可要素とその内容を本文から除去する', () => {
+  assert.match(html, /if \(!ALLOWED_TAGS\.has\(child\.tagName\)\)\s*\{\s*node\.removeChild\(child\);/);
+  assert.doesNotMatch(html, /createTextNode\(child\.textContent \|\| ''\)/);
+});
+
+test('本文表示・インポート・セキュリティ', '未信頼HTMLは不活性なtemplate内容で解析してからサニタイズする', () => {
+  const sanitizer = html.slice(html.indexOf('function sanitizeHTML'), html.indexOf('function processPunctuation'));
+  const importer = html.slice(html.indexOf('async function handleFiles'), html.indexOf("btnImportFile.addEventListener('click'"));
+  assert.match(sanitizer, /document\.createElement\('template'\)/);
+  assert.match(sanitizer, /cleanNode\(fragment\)/);
+  assert.doesNotMatch(sanitizer, /new DOMParser/);
+  assert.match(importer, /const template = document\.createElement\('template'\)/);
+  assert.doesNotMatch(importer, /new DOMParser/);
+});
+
+const readText = () => load(['readTextFile'], { TextDecoder }).readTextFile;
 
 test('インポート', 'UTF-8とBOM付きUTF-16を同じ本文へ復号する', async () => {
   const read = readText();
@@ -375,6 +854,17 @@ test('インポート', '復号できないバイトが続く場合は読み込�
   await assert.rejects(readText()(new Blob([Uint8Array.of(255, 255, 255)])), /文字コード/);
 });
 
+test('インポート', '複数ファイルの結果をファイル別の成功・失敗として返す', async () => {
+  const fixture = importFixture();
+  const result = await fixture.handleFiles([
+    new File(['本文'], 'chapter.txt'),
+    new File(['ignored'], 'notes.bin')
+  ]);
+  assert.equal(result.textStatus, 'committed');
+  assert.deepEqual(Array.from(result.text, item => [item.filename, item.status]), [['chapter.txt', 'committed']]);
+  assert.deepEqual(Array.from(result.failures, item => [item.kind, item.filename]), [['unsupported', 'notes.bin']]);
+});
+
 function importFixture(storeText = () => {}, options = {}) {
   const content = { innerHTML: '<p>既存本文</p>' };
   const viewer = { scrollTop: 260, scrollLeft: -120 };
@@ -385,21 +875,45 @@ function importFixture(storeText = () => {}, options = {}) {
   const mediaWrites = [];
   const mediaSelections = [];
   const noop = () => {};
-  const { readTextFile, getFileExtension } = load('function getFileExtension', 'function refreshExportButtons',
-    ['readTextFile', 'getFileExtension'], { TextDecoder });
-  const { getFileStem } = load('function getFileStem', 'function rgbToHex', ['getFileStem']);
-  const { handleFiles, getExportSource } = load('function getImportFailureReason', "btnImportFile.addEventListener('click'",
-    ['handleFiles', 'getExportSource: () => ({ blob: importedTextFileBlob, extension: importedTextFileExtension })'], {
+  const { readTextFile, getFileExtension } = load(['readTextFile', 'getFileExtension'], { TextDecoder });
+  const { getFileStem } = load(['getFileStem']);
+  const importedSource = { blob: null, extension: '' };
+  const importGlobals = {
     readTextFile, getFileExtension, getFileStem, plainTextToSafeHTML: convert(),
     sanitizeHTML: markup => {
       options.sanitizedInputs?.push(markup);
       return options.sanitize ? options.sanitize(markup) : markup;
     },
-    DOMParser: options.DOMParser,
-    importedTextFileBlob: null, importedTextFileExtension: '',
+    document: options.document,
+    getExportSource: () => ({ blob: importedSource.blob, extension: importedSource.extension }),
     async storeImportedText(blob, extension) {
       await storeText(blob, extension);
+      importedSource.blob = blob;
+      importedSource.extension = extension;
       originals.push({ blob, extension });
+    },
+    async commitSavedData(changes, persistAdditionalData) {
+      const previous = changes.map(([key]) => [key, storage.has(key) ? storage.get(key) : null]);
+      try {
+        for (const [key, value] of changes) {
+          if (value === null) importGlobals.localStorage.removeItem(key);
+          else importGlobals.localStorage.setItem(key, value);
+        }
+        if (persistAdditionalData?.[0]?.key === 'current_text') {
+          const record = persistAdditionalData[0].value;
+          await storeText(record.blob, record.fileExtension);
+          importedSource.blob = record.blob;
+          importedSource.extension = record.fileExtension;
+          originals.push({ blob: record.blob, extension: record.fileExtension });
+        }
+        return true;
+      } catch (error) {
+        for (const [key, value] of previous) {
+          if (value === null) storage.delete(key);
+          else storage.set(key, value);
+        }
+        throw error;
+      }
     },
     async validateImageFile() {}, async validateVideoFile() {},
     async storeBackgroundMedia(file, mediaType) {
@@ -409,7 +923,8 @@ function importFixture(storeText = () => {}, options = {}) {
     URL: { createObjectURL: file => `blob:${file.name}`, revokeObjectURL: noop },
     applyBackgroundImage: (url, _restore, mediaType) => mediaSelections.push({ url, mediaType }),
     activeViewerSettings: settings, novelContentElement: content, viewerContainer: viewer,
-    STORAGE_KEYS: { CONTENT: 'content', SETTINGS: 'settings' }, getPositionStorageKey: () => 'position:old',
+    STORAGE_KEYS: { CONTENT: 'content', SETTINGS: 'settings' }, getPositionStorageKey: () => 'position:old', getBookmarksStorageKey: () => 'bookmarks:old',
+    TEXT_STORE_KEY: 'current_text',
     localStorage: {
       getItem(key) { return storage.get(key) ?? null; },
       setItem(key, value) {
@@ -421,10 +936,15 @@ function importFixture(storeText = () => {}, options = {}) {
       },
       removeItem: key => storage.delete(key)
     },
-    console: { error: noop }, refreshExportButtons: noop, collectTableOfContentsEntries: noop,
+    console: { error: noop }, refreshExportButtons: noop, refreshDocumentNavigation: noop,
     updateReadingState: noop, applySettings: noop, saveSettings: noop, closeAllDrawers: noop,
     showErrorNotice: message => notices.push(message)
+  };
+  Object.defineProperties(importGlobals, {
+    importedTextFileBlob: { get: () => importedSource.blob, set: value => { importedSource.blob = value; }, configurable: true },
+    importedTextFileExtension: { get: () => importedSource.extension, set: value => { importedSource.extension = value; }, configurable: true }
   });
+  const { handleFiles, getExportSource } = load(['handleFiles', 'getExportSource'], importGlobals);
   return { handleFiles, getExportSource, content, viewer, settings, storage, notices, originals, mediaWrites, mediaSelections };
 }
 
@@ -444,21 +964,22 @@ for (const scenario of [
 ]) {
   test('インポート', scenario.name, async () => {
     const sanitizedInputs = [];
-    const parsedDocument = {
-      title: ' 章タイトル ',
-      body: { innerHTML: scenario.bodyHtml },
-      querySelector(selector) { return selector === '#novel-content' && scenario.articleHtml !== null
-        ? { innerHTML: scenario.articleHtml }
-        : null; }
-    };
-    class HtmlParser {
-      parseFromString(source, mimeType) {
-        assert.equal(source, '<html>raw source</html>');
-        assert.equal(mimeType, 'text/html');
-        return parsedDocument;
-      }
-    }
-    const fixture = importFixture(() => {}, { DOMParser: HtmlParser, sanitizedInputs });
+    const fixture = importFixture(() => {}, {
+      sanitizedInputs,
+      document: { createElement(tag) {
+        assert.equal(tag, 'template');
+        return { content: {
+          querySelector(selector) {
+            if (selector === 'title') return { textContent: ' 章タイトル ' };
+            return selector === '#novel-content' && scenario.articleHtml !== null
+              ? { innerHTML: scenario.articleHtml }
+              : null;
+          },
+          get innerHTML() { return scenario.bodyHtml; },
+          set innerHTML(source) { assert.equal(source, '<html>raw source</html>'); }
+        }, get innerHTML() { return this.content.innerHTML; }, set innerHTML(source) { this.content.innerHTML = source; } };
+      } }
+    });
     await fixture.handleFiles([new File(['<html>raw source</html>'], 'chapter.html', { type: 'text/html' })]);
     assert.deepEqual(sanitizedInputs, [scenario.expectedHtml]);
     assert.equal(fixture.content.innerHTML, scenario.expectedHtml);
@@ -619,7 +1140,7 @@ for (const { width, decodeFails, error } of [
     } };
     const file = new Blob(['image']);
     const revoked = [];
-    const { validateImageFile } = load('async function validateImageFile', 'async function handleFiles', ['validateImageFile'], {
+    const { validateImageFile } = load(['validateImageFile'], {
       Image: function () { return image; },
       URL: { createObjectURL: input => { assert.equal(input, file); return 'blob:temporary'; }, revokeObjectURL: url => revoked.push(url) }
     });
@@ -638,7 +1159,7 @@ test('エクスポート', '元ファイルをSHA-256と元の拡張子で命名
   const anchor = { click() { this.clicked = true; }, remove() { this.removed = true; } };
   const revoked = [];
   let cleanup;
-  const { downloadWithHash } = load('async function downloadWithHash', 'function arrayBufferToBase64', ['downloadWithHash'], {
+  const { downloadWithHash } = load(['downloadWithHash'], {
     Blob, crypto: webcrypto,
     document: { createElement: () => anchor, body: { appendChild: node => assert.equal(node, anchor) } },
     URL: { createObjectURL: blob => { assert.equal(blob, source); return 'blob:download'; }, revokeObjectURL: url => revoked.push(url) },
@@ -654,14 +1175,13 @@ test('エクスポート', '元ファイルをSHA-256と元の拡張子で命名
 });
 
 test('エクスポート', 'SHA-256が利用できない環境では元ファイルのダウンロードを開始しない', async () => {
-  const { downloadWithHash } = load('async function downloadWithHash', 'function arrayBufferToBase64', ['downloadWithHash'], {
+  const { downloadWithHash } = load(['downloadWithHash'], {
     Blob, crypto: {}, URL: { createObjectURL: () => assert.fail('ダウンロードURLが生成された') }
   });
   await assert.rejects(downloadWithHash(new Blob(['abc']), '.txt'), /SHA-256/);
 });
 
-const media = () => load('function arrayBufferToBase64', 'function getFileStem',
-  ['arrayBufferToBase64', 'dataUrlToBlob'], { Blob, btoa, atob });
+const media = () => load(['arrayBufferToBase64', 'dataUrlToBlob'], { Blob, btoa, atob });
 
 test('エクスポートHTML内のデータ', 'Base64変換のチャンク境界をまたいでも元のバイト列とMIMEが復元される', async () => {
   const { arrayBufferToBase64, dataUrlToBlob } = media();
@@ -679,8 +1199,14 @@ test('エクスポートHTML内のデータ', 'ペイロード区切りのない
   assert.throws(() => dataUrlToBlob('data:image/png;base64,!!!'), { name: 'InvalidCharacterError' });
 });
 
+test('保存データとストレージ', '復元した背景移動量を画面サイズ内に制限する', () => {
+  const block = html.slice(html.indexOf('function applyBackgroundImage'), html.indexOf('function updateDocumentTitle'));
+  assert.match(block, /backgroundMediaState\.offsetX = Math\.max\(-window\.innerWidth, Math\.min\(window\.innerWidth, savedPosition\.bgOffsetX\)\)/);
+  assert.match(block, /backgroundMediaState\.offsetY = Math\.max\(-window\.innerHeight, Math\.min\(window\.innerHeight, savedPosition\.bgOffsetY\)\)/);
+});
+
 test('エクスポートHTML内のデータ', '埋め込みData URLは背景メディア種別と一致するものだけを許可する', () => {
-  const { isEmbeddableMediaDataUrl } = load('function isAllowedResourceUrl', 'function sanitizeHTML', ['isEmbeddableMediaDataUrl']);
+  const { isEmbeddableMediaDataUrl } = load(['isEmbeddableMediaDataUrl']);
   assert.equal(isEmbeddableMediaDataUrl('data:image/png;base64,AA==', 'image'), true);
   assert.equal(isEmbeddableMediaDataUrl('data:video/webm;base64,AA==', 'video'), true);
   assert.equal(isEmbeddableMediaDataUrl('data:image/png;base64,AA==', 'video'), false);
@@ -688,18 +1214,53 @@ test('エクスポートHTML内のデータ', '埋め込みData URLは背景メ�
 });
 
 test('エクスポートHTML内のデータ', '埋め込みペイロードは無効な媒体を空状態へ正規化する', () => {
-  const { createEmbeddedDownloadData } = load('function isAllowedResourceUrl', 'function sanitizeHTML', ['createEmbeddedDownloadData']);
+  const { createEmbeddedDownloadData } = load(['createEmbeddedDownloadData', 'EMBEDDED_DATA_SCHEMA_VERSION']);
   const payload = createEmbeddedDownloadData('abc', '.txt', 'text/plain', 'blob:null/1', 'image', '.png');
+  assert.equal(payload.schemaVersion, 1);
   assert.equal(payload.textBase64, 'abc');
   assert.equal(payload.mediaIncluded, false);
   assert.equal(payload.mediaType, null);
   assert.equal(payload.mediaDataUrl, '');
 });
 
+test('エクスポートHTML内のデータ', '初期化データを現行スキーマ版で書き出す', () => {
+  const { createEmbeddedResetDefaults, EMBEDDED_DATA_SCHEMA_VERSION } =
+    load(['createEmbeddedResetDefaults', 'EMBEDDED_DATA_SCHEMA_VERSION']);
+  assert.deepEqual(JSON.parse(JSON.stringify(createEmbeddedResetDefaults({ theme: 'light' }, '<p>既定</p>'))), {
+    schemaVersion: EMBEDDED_DATA_SCHEMA_VERSION,
+    settings: { theme: 'light' },
+    content: '<p>既定</p>'
+  });
+});
+
+test('エクスポートHTML内のデータ', '埋め込みJSONを検証し、破損した媒体だけを本文元データから分離する', () => {
+  const { readEmbeddedDownloadData } = load(['readEmbeddedDownloadData', 'isMediaType', 'EMBEDDED_DATA_SCHEMA_VERSION']);
+  const valid = {
+    schemaVersion: 1,
+    textBase64: '5pel', textExtension: '.txt', textMimeType: 'text/plain',
+    mediaIncluded: true, mediaType: 'image', mediaExtension: '.png', mediaDataUrl: 'data:image/png;base64,AA=='
+  };
+  assert.deepEqual(JSON.parse(JSON.stringify(readEmbeddedDownloadData({ textContent: JSON.stringify(valid) }))), {
+    ...valid, mediaInvalid: false
+  });
+
+  const damagedMedia = readEmbeddedDownloadData({ textContent: JSON.stringify({
+    ...valid, mediaDataUrl: 'data:image/png;base64,!!!'
+  }) });
+  assert.equal(damagedMedia.textBase64, valid.textBase64);
+  assert.equal(damagedMedia.mediaIncluded, false);
+  assert.equal(damagedMedia.mediaInvalid, true);
+  assert.equal(readEmbeddedDownloadData({ textContent: JSON.stringify({ ...valid, textBase64: '!!!' }) }), null);
+  assert.equal(readEmbeddedDownloadData({ textContent: JSON.stringify({ ...valid, schemaVersion: 99 }) }), null);
+  const legacy = { ...valid };
+  delete legacy.schemaVersion;
+  assert.equal(readEmbeddedDownloadData({ textContent: JSON.stringify(legacy) }).schemaVersion, 1);
+});
+
 test('エクスポートHTML内のデータ', '埋め込みペイロードは本文と有効な画像・動画情報を保持する', () => {
-  const { createEmbeddedDownloadData } = load('function isAllowedResourceUrl', 'function sanitizeHTML', ['createEmbeddedDownloadData']);
+  const { createEmbeddedDownloadData } = load(['createEmbeddedDownloadData', 'EMBEDDED_DATA_SCHEMA_VERSION']);
   const image = createEmbeddedDownloadData('txt', '.md', 'text/markdown', 'data:image/png;base64,AA==', 'image', '.png');
-  assert.equal(JSON.stringify(image), JSON.stringify({ textBase64: 'txt', textExtension: '.md', textMimeType: 'text/markdown', mediaIncluded: true, mediaType: 'image', mediaExtension: '.png', mediaDataUrl: 'data:image/png;base64,AA==' }));
+  assert.equal(JSON.stringify(image), JSON.stringify({ schemaVersion: 1, textBase64: 'txt', textExtension: '.md', textMimeType: 'text/markdown', mediaIncluded: true, mediaType: 'image', mediaExtension: '.png', mediaDataUrl: 'data:image/png;base64,AA==' }));
   const video = createEmbeddedDownloadData('', '', '', 'data:video/webm;base64,AA==', 'video', '.webm');
   assert.equal(video.mediaIncluded, true);
   assert.equal(video.mediaType, 'video');
@@ -708,7 +1269,7 @@ test('エクスポートHTML内のデータ', '埋め込みペイロードは本
 test('エクスポート', '失敗を通知して再試行を案内し、例外の詳細をログに記録する', () => {
   const notices = [];
   const logs = [];
-  const { reportOperationFailure } = load('function reportOperationFailure', 'function isAllowedSanitizedAttribute', ['reportOperationFailure'], {
+  const { reportOperationFailure } = load(['reportOperationFailure'], {
     console: { error: (...args) => logs.push(args) },
     showErrorNotice: message => notices.push(message)
   });
@@ -720,7 +1281,7 @@ test('エクスポート', '失敗を通知して再試行を案内し、例外�
 });
 
 test('エクスポート', '個別ファイル行は実行時Blobと媒体種別に応じて生成対象を決める', () => {
-  const { getExportButtonDefinitions } = load('function getExportButtonDefinitions', 'function refreshExportButtons', ['getExportButtonDefinitions'], { Blob });
+  const { getExportButtonDefinitions } = load(['getExportButtonDefinitions'], { Blob });
   const text = new Blob(['本文'], { type: 'text/plain' });
   const image = new Blob(['画像'], { type: 'image/png' });
   const imageRows = getExportButtonDefinitions(text, image, 'image');
@@ -730,7 +1291,7 @@ test('エクスポート', '個別ファイル行は実行時Blobと媒体種別
 });
 
 test('エクスポート', '削除操作はテキスト・画像・動画以外を対象にしない', () => {
-  const { getRuntimeDataDeleteType } = load('function getExportButtonDefinitions', 'function refreshExportButtons', ['getRuntimeDataDeleteType']);
+  const { getRuntimeDataDeleteType } = load(['getRuntimeDataDeleteType']);
   assert.equal(getRuntimeDataDeleteType({ dataset: { deleteType: 'text' } }), 'text');
   assert.equal(getRuntimeDataDeleteType({ dataset: { deleteType: 'video' } }), 'video');
   assert.equal(getRuntimeDataDeleteType({ dataset: { deleteType: 'unknown' } }), null);
@@ -738,20 +1299,30 @@ test('エクスポート', '削除操作はテキスト・画像・動画以外�
 });
 
 test('エクスポートHTML', '内蔵初期化データを復元し、不正なデータでは既定値を維持する', () => {
-  const { readEmbeddedResetDefaults } = load('function readEmbeddedResetDefaults', 'btnResetAll.addEventListener', ['readEmbeddedResetDefaults']);
+  const { readEmbeddedResetDefaults } = load(['readEmbeddedResetDefaults', 'EMBEDDED_DATA_SCHEMA_VERSION']);
   const fallback = { theme: 'light' };
-  const element = { textContent: JSON.stringify({ settings: { theme: 'dark' }, content: '<p>初期本文</p>' }) };
+  const element = { textContent: JSON.stringify({ schemaVersion: 1, settings: { theme: 'dark' }, content: '<p>初期本文</p>' }) };
   const restored = readEmbeddedResetDefaults(element, fallback, '<p>既定</p>');
   assert.equal(restored.settings.theme, 'dark');
   assert.equal(restored.content, '<p>初期本文</p>');
+  const legacy = readEmbeddedResetDefaults({ textContent: JSON.stringify({ settings: { theme: 'dark' }, content: '<p>旧データ</p>' }) }, fallback, '<p>既定</p>');
+  assert.equal(legacy.content, '<p>旧データ</p>');
   const invalid = readEmbeddedResetDefaults({ textContent: '{' }, fallback, '<p>既定</p>');
   assert.equal(invalid.settings, fallback);
   assert.equal(invalid.content, '<p>既定</p>');
+  const future = readEmbeddedResetDefaults({ textContent: JSON.stringify({ schemaVersion: 99, settings: { theme: 'dark' }, content: '<p>未知</p>' }) }, fallback, '<p>既定</p>');
+  assert.equal(future.settings, fallback);
+  assert.equal(future.content, '<p>既定</p>');
+  const normalized = readEmbeddedResetDefaults({
+    textContent: JSON.stringify({ settings: { theme: 'attacker', fontSize: 999 }, content: '<script>bad()</script>' })
+  }, { theme: 'light', fontSize: 16 }, '<p>既定</p>');
+  assert.deepEqual(JSON.parse(JSON.stringify(normalized.settings)), { theme: 'light', fontSize: 22 });
+  assert.equal(normalized.content, '<script>bad()</script>');
 });
 
 test('エクスポートHTML', '内蔵ダウンロードデータをJSONとして読み込み、破損時は無効化する', () => {
-  const { readEmbeddedDownloadData } = load('function resolveInitialContent', 'async function init', ['readEmbeddedDownloadData']);
-  assert.equal(readEmbeddedDownloadData({ textContent: '{"mediaType":"image"}' }).mediaType, 'image');
+  const { readEmbeddedDownloadData } = load(['readEmbeddedDownloadData', 'EMBEDDED_DATA_SCHEMA_VERSION']);
+  assert.equal(readEmbeddedDownloadData({ textContent: '{"mediaType":"image"}' }), null);
   assert.equal(readEmbeddedDownloadData({ textContent: '{' }), null);
   assert.equal(readEmbeddedDownloadData(null), null);
 });
@@ -766,7 +1337,7 @@ for (const [mode, key, shift, expected] of [
   ['horizontal', 'ArrowLeft', false, null], ['vertical', 'ArrowDown', false, null]
 ]) {
   test('ページ送り', mode + 'で' + (key === ' ' ? (shift ? 'Shift+Space' : 'Space') : key) + 'を押したときの移動量は' + expected, () => {
-    const { getPageScrollDelta } = load('function getPageScrollDelta', 'async function toggleFullscreen', ['getPageScrollDelta']);
+    const { getPageScrollDelta } = load(['getPageScrollDelta']);
     assert.equal(getPageScrollDelta(mode, key, shift, 540), expected);
   });
 }
@@ -796,10 +1367,9 @@ function readingFixture() {
     },
     backgroundMediaOffsetX: 15, backgroundMediaOffsetY: -5, isRestoringReadingPosition: false, changingSavedData: false
   };
-  const { computeProgressRatio } = load('function computeProgressRatio', 'function findCurrentReadingContext', ['computeProgressRatio'], context);
+  const { computeProgressRatio } = load(['computeProgressRatio'], context);
   Object.assign(context, { computeProgressRatio });
-  const operations = load('function executeSavePosition', 'async function restoreReadingPositionAfterLayout',
-    ['executeSavePosition', 'restoreReadingPosition'], context);
+  const operations = load(['executeSavePosition', 'restoreReadingPosition'], context);
   return { ...operations, computeProgressRatio, context, values, viewer, settings, visits, messages };
 }
 
@@ -817,12 +1387,12 @@ test('目次・読書進捗・読書位置', '書字方向に合った軸で進�
   assert.equal(fixture.computeProgressRatio(), 0);
 });
 
-test('保存データとストレージ', '設定保存の失敗を一度通知し、再保存後に失敗状態を解除する', () => {
+test('保存データとストレージ', '設定保存の失敗を一度通知し、再保存後に失敗状態を解除する', async () => {
   const settings = { theme: 'light' };
   const failed = new Set();
   const notices = [];
   let rejectWrite = true;
-  const { saveSettings } = load('function saveSettings()', 'function updateSetting', ['saveSettings'], {
+  const { saveSettings, flushSettingsSave } = load(['saveSettings', 'flushSettingsSave'], {
     activeViewerSettings: settings,
     STORAGE_KEYS: { SETTINGS: 'settings' },
     localStorage: { setItem(key, value) { if (rejectWrite) throw new Error('拒否'); this.value = [key, value]; } },
@@ -835,10 +1405,12 @@ test('保存データとストレージ', '設定保存の失敗を一度通知�
   });
   saveSettings();
   saveSettings();
+  await flushSettingsSave();
   assert.deepEqual(notices, ['拒否']);
   assert.equal(failed.has('settings'), true);
   rejectWrite = false;
   saveSettings();
+  await flushSettingsSave();
   assert.equal(failed.has('settings'), false);
 });
 
@@ -856,7 +1428,7 @@ test('保存データとストレージ', '背景位置の保存失敗を通知�
     reportLocalStorageWrite(key, error) { failures.push([key, error.message]); },
     confirmLocalStorageWrite() {}
   };
-  const { saveBackgroundPosition } = load('function saveBackgroundPosition()', 'function updateReadingState', ['saveBackgroundPosition'], globals);
+  const { saveBackgroundPosition } = load(['saveBackgroundPosition'], globals);
   saveBackgroundPosition();
   assert.deepEqual(failures, [['position', '拒否']]);
   rejectWrite = false;
@@ -871,8 +1443,7 @@ test('目次・読書進捗・読書位置', '横書き・縦書きの見出し�
   const blocks = [block(90, 520), block(130, 480), block(240, 350)];
   const settings = { writingMode: 'horizontal' };
   const viewer = { getBoundingClientRect: () => ({ top: 120, right: 500 }) };
-  const { findCurrentReadingContext } = load('function findCurrentReadingContext', 'function executeSavePosition',
-    ['findCurrentReadingContext'], {
+  const { findCurrentReadingContext } = load(['findCurrentReadingContext'], {
       activeViewerSettings: settings, viewerContainer: viewer,
       tableOfContentsEntries: headings.map(element => ({ id: element.id, element })),
       novelContentElement: { querySelectorAll: () => blocks }
@@ -886,8 +1457,7 @@ test('目次・読書進捗・読書位置', '横書き・縦書きの見出し�
   assert.equal(vertical.currentHeading, 'heading-1');
   assert.equal(vertical.lineIndex, 1);
   settings.writingMode = 'horizontal';
-  const noHeadings = load('function findCurrentReadingContext', 'function executeSavePosition',
-    ['findCurrentReadingContext'], {
+  const noHeadings = load(['findCurrentReadingContext'], {
       activeViewerSettings: settings, viewerContainer: viewer, tableOfContentsEntries: [],
       novelContentElement: { querySelectorAll: () => [] }
     }).findCurrentReadingContext;
@@ -913,6 +1483,30 @@ test('保存データとストレージ', '保存した読書位置は別文書�
   fixture.context.documentKey = 'first';
   fixture.restoreReadingPosition();
   assert.equal(fixture.viewer.scrollTop, 125);
+  fixture.values.set('hitohira_position:first', JSON.stringify({ writingMode: 'horizontal', scrollTop: 9000, scrollLeft: -9000 }));
+  fixture.restoreReadingPosition();
+  assert.equal(fixture.viewer.scrollTop, 500);
+  assert.equal(fixture.viewer.scrollLeft, -1000);
+  fixture.values.set('hitohira_position:first', JSON.stringify({ writingMode: 'horizontal', scrollTop: -20, scrollLeft: 20 }));
+  fixture.restoreReadingPosition();
+  assert.equal(fixture.viewer.scrollTop, 0);
+  assert.equal(fixture.viewer.scrollLeft, 0);
+});
+
+test('保存データとストレージ', '読書位置の読み取り拒否・破損JSONでは現在位置を維持して続行する', () => {
+  const rejectedRead = readingFixture();
+  rejectedRead.viewer.scrollTop = 210;
+  rejectedRead.context.localStorage.getItem = () => { throw new Error('読み取り拒否'); };
+  rejectedRead.restoreReadingPosition();
+  assert.equal(rejectedRead.viewer.scrollTop, 210);
+  assert.ok(rejectedRead.messages.some(message => String(message).includes('保存済み読書位置を読み出せませんでした')));
+
+  const malformedValue = readingFixture();
+  malformedValue.viewer.scrollTop = 315;
+  malformedValue.context.localStorage.getItem = () => '{';
+  malformedValue.restoreReadingPosition();
+  assert.equal(malformedValue.viewer.scrollTop, 315);
+  assert.ok(malformedValue.messages.some(message => String(message).includes('保存済み読書位置を復元できませんでした')));
 });
 
 test('目次・読書進捗・読書位置', '書字方向が変わったときは本文ブロックを優先し、存在しなければ進捗を使う', () => {
@@ -973,12 +1567,11 @@ test('目次・読書進捗・読書位置', '遅延画像の描画後に位置�
     confirmLocalStorageWrite(key) { context.failedLocalStorageWrites.delete(key); },
     getPositionStorageKey: () => 'position',
     document: { fonts: { ready: Promise.resolve() } },
-    requestAnimationFrame(callback) { return setTimeout(callback, 0); },
+    requestAnimationFrame(callback) { callback(); return 1; },
     backgroundMediaOffsetX: 0, backgroundMediaOffsetY: 0,
     changingSavedData: false, isRestoringReadingPosition: false
   };
   const operations = load(
-    'function computeProgressRatio', 'function openSettingsDrawer',
     ['computeProgressRatio', 'findCurrentReadingContext', 'executeSavePosition', 'restoreReadingPosition', 'restoreReadingPositionAfterLayout'], context);
   savePosition = operations.executeSavePosition;
 
@@ -997,7 +1590,7 @@ test('目次・読書進捗・読書位置', '遅延画像の描画後に位置�
   assert.equal(JSON.parse(saved.get('position')).scrollTop, 100);
 });
 
-function mediaStorageFixture(localStorage) {
+function mediaStorageFixture(localStorage = { getItem: () => null, setItem() {}, removeItem() {} }) {
   const records = new Map();
   let closed = 0;
   let nextWriteError;
@@ -1048,12 +1641,243 @@ function mediaStorageFixture(localStorage) {
       return request;
     }
   };
-  const { getFileExtension } = load('function getFileExtension', 'function refreshExportButtons', ['getFileExtension']);
-  const operations = load('const MEDIA_DB_NAME', 'function blobToDataUrl',
-    ['storeBackgroundMedia', 'loadBackgroundMedia', 'deleteMediaRecords', 'changeSavedData', 'storeImportedText', 'loadImportedText'],
-    { indexedDB, window: { indexedDB }, getFileExtension, localStorage });
-  return { ...operations, records, closed: () => closed, abortNextWrite: error => { nextWriteError = error; } };
+  const { getFileExtension } = load(['getFileExtension']);
+  const operations = load(['storeBackgroundMedia', 'loadBackgroundMedia', 'deleteMediaRecords', 'changeSavedData', 'commitSavedData', 'storeImportedText', 'loadImportedText', 'changingSavedData'],
+    { indexedDB, window: { indexedDB }, getFileExtension, localStorage,
+      MEDIA_DB_NAME: 'hitohira_media_db', MEDIA_DB_VERSION: 1,
+      MEDIA_STORE_NAME: 'background_media', MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text' });
+  return { ...operations, indexedDB, records, closed: () => closed, abortNextWrite: error => { nextWriteError = error; } };
 }
+
+test('保存データとストレージ', '復旧記録の型・キー・操作を検証し、不正値をすべて拒否する', () => {
+  const isValid = load(['isValidSavedDataTransaction'], {
+    STORAGE_KEYS: { SETTINGS: 'settings', CONTENT: 'content' },
+    MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text', MEDIA_TRANSACTION_KEY: '__pending_transaction__',
+    SAVED_DATA_REVISION_KEY: 'revision'
+  }).isValidSavedDataTransaction;
+  assert.equal(isValid({ version: 1, localStorage: [['hitohira_content', '<p>本文</p>']], indexedDb: [{ type: 'put', key: 'current_text', value: { blob: {} } }] }), true);
+  for (const invalid of [
+    { version: 2, localStorage: [], indexedDb: [] },
+    { version: 1, localStorage: [['unknown', 'value']], indexedDb: [] },
+    { version: 1, localStorage: [['content', 12]], indexedDb: [] },
+    { version: 1, localStorage: [], indexedDb: [{ type: 'clear', key: 'current_text' }] },
+    { version: 1, localStorage: [], indexedDb: [{ type: 'put', key: 'unknown', value: {} }] },
+    { version: 1, localStorage: [], indexedDb: [{ type: 'put', key: 'current_text', value: null }] }
+  ]) assert.equal(isValid(invalid), false);
+});
+
+test('保存データとストレージ', '中断記録を次回起動時に再適用してLocalStorageとIndexedDBを揃える', async () => {
+  const saved = new Map();
+  const localStorage = {
+    getItem: key => saved.get(key) ?? null,
+    setItem: (key, value) => saved.set(key, value),
+    removeItem: key => saved.delete(key)
+  };
+  const storage = mediaStorageFixture(localStorage);
+  const importedText = { blob: new Blob(['復旧本文']), fileExtension: '.txt', updatedAt: 123 };
+  storage.records.set('__pending_transaction__', {
+    version: 1, localStorage: [['hitohira_content', '<p>復旧本文</p>']],
+    indexedDb: [{ type: 'put', key: 'current_text', value: importedText }]
+  });
+  saved.set('hitohira_pending_saved_data_transaction', JSON.stringify({
+    version: 1, hasIndexedDbOperations: true
+  }));
+  const { recoverSavedDataTransaction } = load(['recoverSavedDataTransaction'], {
+    indexedDB: storage.indexedDB, window: { indexedDB: storage.indexedDB }, localStorage,
+    MEDIA_DB_NAME: 'hitohira_media_db', MEDIA_DB_VERSION: 1, MEDIA_STORE_NAME: 'background_media',
+    STORAGE_KEYS: { SETTINGS: 'hitohira_settings', POSITION: 'hitohira_position', BOOKMARKS: 'hitohira_bookmarks', CONTENT: 'hitohira_content' },
+    MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text', SAVED_DATA_REVISION_KEY: 'hitohira_saved_data_revision'
+  });
+
+  assert.equal(await recoverSavedDataTransaction(), true);
+  assert.equal(saved.get('hitohira_content'), '<p>復旧本文</p>');
+  assert.equal(saved.has('hitohira_pending_saved_data_transaction'), false);
+  assert.equal(storage.records.has('__pending_transaction__'), false);
+  assert.equal((await storage.loadImportedText()).blob, importedText.blob);
+  assert.equal(await recoverSavedDataTransaction(), false);
+});
+
+test('保存データとストレージ', '不正な復旧マーカーは保持して復旧を中止する', async () => {
+  const saved = new Map([['hitohira_pending_saved_data_transaction', '{']]);
+  const localStorage = {
+    getItem: key => saved.get(key) ?? null,
+    setItem: (key, value) => saved.set(key, value),
+    removeItem: key => saved.delete(key)
+  };
+  const storage = mediaStorageFixture(localStorage);
+  const { recoverSavedDataTransaction } = load(['recoverSavedDataTransaction'], {
+    indexedDB: storage.indexedDB, window: { indexedDB: storage.indexedDB }, localStorage,
+    MEDIA_DB_NAME: 'hitohira_media_db', MEDIA_DB_VERSION: 1, MEDIA_STORE_NAME: 'background_media',
+    STORAGE_KEYS: { SETTINGS: 'hitohira_settings', POSITION: 'hitohira_position', BOOKMARKS: 'hitohira_bookmarks', CONTENT: 'hitohira_content' },
+    MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text', SAVED_DATA_REVISION_KEY: 'hitohira_saved_data_revision'
+  });
+
+  await assert.rejects(recoverSavedDataTransaction(), error => error.name === 'SyntaxError');
+  assert.equal(saved.get('hitohira_pending_saved_data_transaction'), '{');
+  assert.equal(storage.records.has('__pending_transaction__'), false);
+});
+
+test('保存データとストレージ', '復旧マーカーに対応するIndexedDB記録がない場合はマーカーを保持する', async () => {
+  const serialized = JSON.stringify({ version: 1, hasIndexedDbOperations: true });
+  const saved = new Map([['hitohira_pending_saved_data_transaction', serialized]]);
+  const localStorage = {
+    getItem: key => saved.get(key) ?? null,
+    setItem: (key, value) => saved.set(key, value),
+    removeItem: key => saved.delete(key)
+  };
+  const storage = mediaStorageFixture(localStorage);
+  const { recoverSavedDataTransaction } = load(['recoverSavedDataTransaction'], {
+    indexedDB: storage.indexedDB, window: { indexedDB: storage.indexedDB }, localStorage,
+    MEDIA_DB_NAME: 'hitohira_media_db', MEDIA_DB_VERSION: 1, MEDIA_STORE_NAME: 'background_media',
+    STORAGE_KEYS: { SETTINGS: 'hitohira_settings', POSITION: 'hitohira_position', BOOKMARKS: 'hitohira_bookmarks', CONTENT: 'hitohira_content' },
+    MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text', SAVED_DATA_REVISION_KEY: 'hitohira_saved_data_revision'
+  });
+
+  await assert.rejects(recoverSavedDataTransaction(), /記録が見つかりません/);
+  assert.equal(saved.get('hitohira_pending_saved_data_transaction'), serialized);
+});
+
+test('保存データとストレージ', '未知形式の復旧マーカーは保持して復旧を中止する', async () => {
+  const serialized = JSON.stringify({ version: 2, hasIndexedDbOperations: true });
+  const saved = new Map([['hitohira_pending_saved_data_transaction', serialized]]);
+  const localStorage = {
+    getItem: key => saved.get(key) ?? null,
+    setItem: (key, value) => saved.set(key, value),
+    removeItem: key => saved.delete(key)
+  };
+  const storage = mediaStorageFixture(localStorage);
+  const { recoverSavedDataTransaction } = load(['recoverSavedDataTransaction'], {
+    indexedDB: storage.indexedDB, window: { indexedDB: storage.indexedDB }, localStorage,
+    MEDIA_DB_NAME: 'hitohira_media_db', MEDIA_DB_VERSION: 1, MEDIA_STORE_NAME: 'background_media',
+    STORAGE_KEYS: { SETTINGS: 'hitohira_settings', POSITION: 'hitohira_position', BOOKMARKS: 'hitohira_bookmarks', CONTENT: 'hitohira_content' },
+    MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text', SAVED_DATA_REVISION_KEY: 'hitohira_saved_data_revision'
+  });
+
+  await assert.rejects(recoverSavedDataTransaction(), /復旧記録が不正/);
+  assert.equal(saved.get('hitohira_pending_saved_data_transaction'), serialized);
+});
+
+test('保存データとストレージ', '不正なIndexedDB復旧記録を保持して起動用復旧を中止する', async () => {
+  const serialized = JSON.stringify({ version: 1, hasIndexedDbOperations: true });
+  const saved = new Map([['hitohira_pending_saved_data_transaction', serialized]]);
+  const localStorage = {
+    getItem: key => saved.get(key) ?? null,
+    setItem: (key, value) => saved.set(key, value),
+    removeItem: key => saved.delete(key)
+  };
+  const storage = mediaStorageFixture(localStorage);
+  storage.records.set('__pending_transaction__', { version: 2, localStorage: [], indexedDb: [] });
+  const { recoverSavedDataTransaction } = load(['recoverSavedDataTransaction'], {
+    indexedDB: storage.indexedDB, window: { indexedDB: storage.indexedDB }, localStorage,
+    MEDIA_DB_NAME: 'hitohira_media_db', MEDIA_DB_VERSION: 1, MEDIA_STORE_NAME: 'background_media',
+    STORAGE_KEYS: { SETTINGS: 'hitohira_settings', POSITION: 'hitohira_position', BOOKMARKS: 'hitohira_bookmarks', CONTENT: 'hitohira_content' },
+    MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text', SAVED_DATA_REVISION_KEY: 'hitohira_saved_data_revision'
+  });
+
+  await assert.rejects(recoverSavedDataTransaction(), /復旧記録が不正/);
+  assert.equal(saved.get('hitohira_pending_saved_data_transaction'), serialized);
+  assert.equal(storage.records.get('__pending_transaction__').version, 2);
+});
+
+test('保存データとストレージ', '復旧記録の不正なキーや操作を適用せず記録を保持する', async () => {
+  const serialized = JSON.stringify({ version: 1, hasIndexedDbOperations: true });
+  const saved = new Map([['hitohira_pending_saved_data_transaction', serialized]]);
+  const localStorage = {
+    getItem: key => saved.get(key) ?? null,
+    setItem: (key, value) => saved.set(key, value),
+    removeItem: key => saved.delete(key)
+  };
+  const storage = mediaStorageFixture(localStorage);
+  storage.records.set('__pending_transaction__', {
+    version: 1,
+    localStorage: [['unknown', 'attacker-controlled']],
+    indexedDb: [{ type: 'clear', key: 'current_text' }]
+  });
+  const { recoverSavedDataTransaction } = load(['recoverSavedDataTransaction'], {
+    indexedDB: storage.indexedDB, window: { indexedDB: storage.indexedDB }, localStorage,
+    MEDIA_DB_NAME: 'hitohira_media_db', MEDIA_DB_VERSION: 1, MEDIA_STORE_NAME: 'background_media',
+    STORAGE_KEYS: { SETTINGS: 'hitohira_settings', POSITION: 'hitohira_position', BOOKMARKS: 'hitohira_bookmarks', CONTENT: 'hitohira_content' },
+    MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text', SAVED_DATA_REVISION_KEY: 'hitohira_saved_data_revision'
+  });
+
+  await assert.rejects(recoverSavedDataTransaction(), /復旧記録が不正/);
+  assert.equal(saved.has('hitohira_saved_data_lock'), false);
+  assert.equal(storage.records.has('current_text'), false);
+  assert.equal(storage.records.has('__pending_transaction__'), true);
+  assert.equal(saved.get('hitohira_pending_saved_data_transaction'), serialized);
+});
+
+test('保存データとストレージ', '復旧の再適用に失敗した場合はマーカーとステージ記録を残す', async () => {
+  const serialized = JSON.stringify({ version: 1, hasIndexedDbOperations: true });
+  const saved = new Map([['hitohira_pending_saved_data_transaction', serialized]]);
+  const localStorage = {
+    getItem: key => saved.get(key) ?? null,
+    setItem(key, value) { if (key === 'hitohira_content') throw new Error('LocalStorage書込拒否'); saved.set(key, value); },
+    removeItem: key => saved.delete(key)
+  };
+  const storage = mediaStorageFixture(localStorage);
+  storage.records.set('__pending_transaction__', {
+    version: 1, localStorage: [['hitohira_content', '<p>復旧本文</p>']], indexedDb: []
+  });
+  const { recoverSavedDataTransaction } = load(['recoverSavedDataTransaction'], {
+    indexedDB: storage.indexedDB, window: { indexedDB: storage.indexedDB }, localStorage,
+    MEDIA_DB_NAME: 'hitohira_media_db', MEDIA_DB_VERSION: 1, MEDIA_STORE_NAME: 'background_media',
+    STORAGE_KEYS: { SETTINGS: 'hitohira_settings', POSITION: 'hitohira_position', BOOKMARKS: 'hitohira_bookmarks', CONTENT: 'hitohira_content' },
+    MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text', SAVED_DATA_REVISION_KEY: 'hitohira_saved_data_revision'
+  });
+
+  await assert.rejects(recoverSavedDataTransaction(), /LocalStorage書込拒否/);
+  assert.equal(saved.get('hitohira_pending_saved_data_transaction'), serialized);
+  assert.equal(storage.records.get('__pending_transaction__').localStorage[0][1], '<p>復旧本文</p>');
+});
+
+test('保存データとストレージ', 'LocalStorageマーカーがない孤立した復旧記録でIndexedDB接続を開かない', async () => {
+  let opened = 0;
+  const indexedDB = { open() { opened++; throw new Error('孤立記録を検査できません'); } };
+  const localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+  const { recoverSavedDataTransaction } = load(['recoverSavedDataTransaction'], {
+    indexedDB, window: { indexedDB }, localStorage,
+    MEDIA_DB_NAME: 'hitohira_media_db', MEDIA_DB_VERSION: 1, MEDIA_STORE_NAME: 'background_media',
+    STORAGE_KEYS: { SETTINGS: 'hitohira_settings', POSITION: 'hitohira_position', BOOKMARKS: 'hitohira_bookmarks', CONTENT: 'hitohira_content' },
+    MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text', SAVED_DATA_REVISION_KEY: 'hitohira_saved_data_revision'
+  });
+
+  await assert.rejects(recoverSavedDataTransaction(), /孤立記録を検査できません/);
+  assert.equal(opened, 1);
+});
+
+test('保存データとストレージ', '通常の複数保存は完了後に中断記録を消し、LocalStorage失敗時は元へ戻す', async () => {
+  const saved = new Map([['hitohira_content', '<p>旧本文</p>']]);
+  let rejectedKey = null;
+  const localStorage = {
+    getItem: key => saved.get(key) ?? null,
+    setItem(key, value) {
+      if (key === rejectedKey) { rejectedKey = null; throw new Error(`拒否: ${key}`); }
+      saved.set(key, value);
+    },
+    removeItem: key => saved.delete(key)
+  };
+  const storage = mediaStorageFixture(localStorage);
+  assert.equal(await storage.commitSavedData(
+    [['hitohira_content', '<p>新本文</p>'], ['hitohira_settings', '{"theme":"dark"}']],
+    [{ type: 'put', key: 'current_text', value: { blob: new Blob(['新原文']), fileExtension: '.txt' } }]
+  ), true);
+  assert.equal(saved.get('hitohira_content'), '<p>新本文</p>');
+  assert.equal(saved.has('hitohira_pending_saved_data_transaction'), false);
+  assert.equal(storage.records.has('__pending_transaction__'), false);
+  assert.equal((await storage.loadImportedText()).fileExtension, '.txt');
+
+  rejectedKey = 'hitohira_settings';
+  await assert.rejects(storage.commitSavedData(
+    [['hitohira_content', '<p>誤更新</p>'], ['hitohira_settings', '{"theme":"light"}']],
+    [{ type: 'delete', key: 'current_text' }]
+  ), /拒否: hitohira_settings/);
+  assert.equal(saved.get('hitohira_content'), '<p>新本文</p>');
+  assert.equal(saved.get('hitohira_settings'), '{"theme":"dark"}');
+  assert.equal(saved.has('hitohira_pending_saved_data_transaction'), false);
+  assert.equal(storage.records.has('__pending_transaction__'), false);
+  assert.ok(await storage.loadImportedText());
+});
 
 test('保存データとストレージ', 'IndexedDBの初回作成・オープン拒否・読み取り失敗でストアを作成し接続を閉じる', async () => {
   const storeNames = [];
@@ -1082,8 +1906,7 @@ test('保存データとストレージ', 'IndexedDBの初回作成・オープ�
       return request;
     }
   };
-  const operations = load('function openMediaDatabase()', 'function blobToDataUrl',
-    ['openMediaDatabase', 'loadImportedText'], {
+  const operations = load(['openMediaDatabase', 'loadImportedText'], {
       indexedDB, window: { indexedDB }, MEDIA_DB_NAME: 'hitohira_media_db', MEDIA_DB_VERSION: 1,
       MEDIA_STORE_NAME: 'background_media', MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text'
     });
@@ -1101,15 +1924,14 @@ test('保存データとストレージ', 'IndexedDBの初回作成・オープ�
   await assert.rejects(operations.loadImportedText(), /読み取り拒否/);
   assert.equal(closed, 2, '読み取り失敗でもDB接続を閉じます');
 
-  const unavailable = load('function openMediaDatabase()', 'function blobToDataUrl', ['openMediaDatabase'], {
+  const unavailable = load(['openMediaDatabase'], {
     window: {}, MEDIA_DB_NAME: 'hitohira_media_db', MEDIA_DB_VERSION: 1,
     MEDIA_STORE_NAME: 'background_media', MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text'
   }).openMediaDatabase;
   await assert.rejects(unavailable(), /IndexedDB is unavailable/);
 
   const startupCalls = [];
-  const restoreDeferredData = load('async function restoreDeferredData(isExportedDocument)', 'init();',
-    ['restoreDeferredData'], {
+  const restoreDeferredData = load(['restoreDeferredData'], {
       loadBackgroundMedia: async () => { throw new Error('保存領域の読み取り拒否'); },
       loadImportedText: async () => null,
       activeViewerSettings: {}, refreshExportButtons: () => startupCalls.push('refresh'),
@@ -1169,8 +1991,9 @@ async function removalFixture(exported = false) {
   const viewer = { scrollTop: 80, scrollLeft: -40 };
   const resetButton = { setAttribute(name, value) { this[name] = value; } };
   const embedded = { textContent: JSON.stringify({ settings: defaults, content: defaultContent }) };
-  const positionKey = exported ? 'position:exported' : 'position:default';
-  const saved = new Map([['settings', JSON.stringify(settings)], ['content', content.innerHTML], [positionKey, '{"scrollTop":80}']]);
+  const positionKey = exported ? 'hitohira_position:exported' : 'hitohira_position:default';
+  const bookmarkKey = 'hitohira_bookmarks:document';
+  const saved = new Map([['hitohira_settings', JSON.stringify(settings)], ['hitohira_content', content.innerHTML], [positionKey, '{"scrollTop":80}'], [bookmarkKey, '[{"id":"a","name":"続き","position":{"scrollTop":20}}]']]);
   const notices = [];
   const local = {
     getItem: key => saved.get(key) ?? null,
@@ -1184,18 +2007,8 @@ async function removalFixture(exported = false) {
   await database.storeBackgroundMedia(image, 'image');
   const handlers = {};
   const register = type => ({ addEventListener(_, listener) { handlers[type] = listener; } });
-  const definition = (start, end) => html.slice(html.indexOf(start), html.indexOf(end, html.indexOf(start)));
-  const source = [
-    definition('function updateResetButtonState', 'const loadedFileDownloads'),
-    definition("loadedFileDownloads.addEventListener('click'", "btnExportHtml.addEventListener('click'"),
-    definition('function readEmbeddedResetDefaults', '// 本文クリックによるページ送り。'),
-    '// end'
-  ].join('\n');
-  let updateResetButtonState;
-  let clearBackground;
-  const operations = loadFunctionsFromHtml(source, 'function updateResetButtonState', '// end',
-    ['snapshot: () => ({ settings: { ...activeViewerSettings }, text: importedTextFileBlob, background: backgroundMediaFileBlob })',
-      'clearBackground: () => { backgroundMediaDataUrl = null; }', 'updateResetButtonState'], {
+  const state = { text, textExtension: '.txt', background: image, backgroundExtension: '.png', backgroundUrl: 'blob:image' };
+  const globals = {
       document: {
         documentElement: { dataset: { exported: String(exported) } },
         getElementById: () => embedded,
@@ -1204,21 +2017,30 @@ async function removalFixture(exported = false) {
       DEFAULT_SETTINGS: exported ? { ...settings } : defaults, activeViewerSettings: settings, viewerResetDefaults: null,
       THEME_PALETTES: { light: {} }, themeDerivedColors: {},
       novelContentElement: content, initialNovelContentHtml: exported ? content.innerHTML : defaultContent, viewerContainer: viewer,
+      sanitizeHTML: markup => markup,
       btnResetAll: Object.assign(resetButton, register('reset')), loadedFileDownloads: register('delete'),
-      STORAGE_KEYS: { SETTINGS: 'settings', CONTENT: 'content' }, getPositionStorageKey: () => positionKey,
+      STORAGE_KEYS: { SETTINGS: 'hitohira_settings', CONTENT: 'hitohira_content', POSITION: 'hitohira_position', BOOKMARKS: 'hitohira_bookmarks' }, getPositionStorageKey: () => positionKey, getBookmarksStorageKey: () => bookmarkKey,
+      readBookmarks: () => { try { return JSON.parse(local.getItem(bookmarkKey) || '[]'); } catch { return []; } },
       MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text', changeSavedData: database.changeSavedData,
       getRuntimeDataDeleteType: button => button.dataset.deleteType,
-      importedTextFileBlob: text, importedTextFileExtension: '.txt',
-      backgroundMediaFileBlob: image, backgroundMediaFileExtension: '.png', backgroundMediaDataUrl: 'blob:image',
-      backgroundMediaType: 'image', applyBackgroundImage(url) { if (url === null) clearBackground(); },
-      refreshExportButtons() {}, collectTableOfContentsEntries() {}, updateReadingState() {}, closeAllDrawers() {},
-      applySettings() { updateResetButtonState(); },
+      backgroundMediaType: 'image', backgroundMediaDataUrl: state.backgroundUrl,
+      applyBackgroundImage(url) { if (url === null) state.backgroundUrl = null; },
+      refreshExportButtons() {}, refreshDocumentNavigation() {}, updateReadingState() {}, closeAllDrawers() {},
+      applySettings() {},
       reportOperationFailure: (label, error) => notices.push({ label, error })
-    });
-  ({ updateResetButtonState, clearBackground } = operations);
+  };
+  for (const [name, key] of [['importedTextFileBlob', 'text'], ['importedTextFileExtension', 'textExtension'],
+    ['backgroundMediaFileBlob', 'background'], ['backgroundMediaFileExtension', 'backgroundExtension'],
+    ['backgroundMediaDataUrl', 'backgroundUrl']]) {
+    Object.defineProperty(globals, name, { get: () => state[key], set: value => { state[key] = value; }, configurable: true });
+  }
+  const operations = load(['initializeLoadedFileDownloadHandler', 'initializeResetHandler', 'updateResetButtonState', 'EMBEDDED_DATA_SCHEMA_VERSION'], globals);
+  operations.initializeLoadedFileDownloadHandler();
+  operations.initializeResetHandler();
+  const updateResetButtonState = operations.updateResetButtonState;
   const pressDelete = type => handlers.delete({ target: { closest: () => ({ dataset: { deleteType: type } }) } });
   updateResetButtonState();
-  return { saved, local, database, snapshot: operations.snapshot, content, viewer, defaultContent, embedded, notices, resetButton,
+  return { saved, local, database, snapshot: () => ({ settings: { ...settings }, text: state.text, background: state.background }), content, viewer, defaultContent, embedded, notices, resetButton,
     updateResetButtonState, pressDelete, reset: handlers.reset };
 }
 
@@ -1252,7 +2074,7 @@ test('個別削除', 'LocalStorageの途中で拒否されたら変更を戻し�
   const remove = f.local.removeItem;
   const error = new Error('本文の削除拒否');
   f.local.removeItem = key => {
-    if (key === 'content') throw error;
+    if (key === 'hitohira_content') throw error;
     remove(key);
   };
   await f.pressDelete('text');
@@ -1268,9 +2090,10 @@ test('初期化', 'エクスポートHTMLでは本文・媒体の実行時状態
   const initial = f.snapshot();
   await f.reset();
   assert.equal(f.embedded.textContent, previousEmbedded);
-  assert.equal(f.saved.has('position:exported'), false);
-  assert.equal(f.saved.get('settings'), JSON.stringify(initial.settings));
-  assert.equal(f.saved.get('content'), '<p>保存済み本文</p>');
+  assert.equal(f.saved.has('hitohira_position:exported'), false);
+  assert.equal(f.saved.has('hitohira_bookmarks:document'), false);
+  assert.equal(f.saved.get('hitohira_settings'), JSON.stringify(initial.settings));
+  assert.equal(f.saved.get('hitohira_content'), '<p>保存済み本文</p>');
   assert.equal((await f.database.loadImportedText()).blob, initial.text);
   assert.equal((await f.database.loadBackgroundMedia()).blob, initial.background);
   assert.equal(f.snapshot().text, null);
@@ -1281,7 +2104,7 @@ test('初期化', 'エクスポートHTMLでは本文・媒体の実行時状態
 });
 
 test('背景メディア', '動画要素へミュート・自動再生・ループ・インライン再生を設定する', () => {
-  const { configureBackgroundVideoElement } = load('function configureBackgroundVideoElement', 'function applyBackgroundImage', ['configureBackgroundVideoElement']);
+  const { configureBackgroundVideoElement } = load(['configureBackgroundVideoElement']);
   const attrs = new Map();
   const video = { muted: false, autoplay: false, loop: false, playsInline: false, setAttribute(name, value) { attrs.set(name, value); } };
   configureBackgroundVideoElement(video);
@@ -1318,8 +2141,7 @@ function backgroundFixture() {
     'rubyScaleControl', 'valRubyScale', 'contentBackgroundOpacityControl', 'valContentBgAlpha',
     'readingProgressVisibilityControl', 'wakeLockControl'
   ].map(name => [name, { querySelectorAll: () => [] }]));
-  const { applyBackgroundImage, applySettings } = load('function getFileStem', 'function saveSettings',
-    ['applyBackgroundImage', 'applySettings'], {
+  const { applyBackgroundImage, applySettings } = load(['applyBackgroundImage', 'applySettings'], {
       ...controls,
       document: {
         documentElement: { setAttribute() {}, style: { setProperty: (name, value) => css.set(name, value) } },
@@ -1332,8 +2154,10 @@ function backgroundFixture() {
       },
       window: { innerWidth: 100, innerHeight: 100 },
       backgroundVideo: video, automaticColorSyncControl: control,
+      bgViewportMap: { style: { setProperty() {} } },
       btnThemeToggle: { querySelector: () => ({}) }, progressIndicator: { classList: { toggle() {} } },
       activeViewerSettings: settings, themeDerivedColors: {},
+      currentLanguage: 'ja',
       DEFAULT_BACKGROUND_IMAGES: { light: 'paper.png' },
       backgroundMediaDataUrl: null, backgroundMediaObjectUrl: null, backgroundMediaType: null,
       backgroundMediaNaturalWidth: 0, backgroundMediaNaturalHeight: 0,
@@ -1412,6 +2236,14 @@ test('背景メディア', '動画の寸法取得後に表示位置を制限し�
   assert.equal(f.css.get('--panel-rgb'), '68, 85, 102');
 });
 
+test('背景メディア', '表示・保存・寸法・位置の状態を一つの実行時オブジェクトへまとめる', () => {
+  const stateDeclaration = html.match(/const backgroundMediaState = \{([\s\S]*?)\n  \};/)?.[1] || '';
+  for (const field of ['dataUrl', 'objectUrl', 'mediaType', 'fileBlob', 'fileExtension', 'lastLoadedImage', 'naturalWidth', 'naturalHeight', 'offsetX', 'offsetY']) {
+    assert.match(stateDeclaration, new RegExp(`\\b${field}:`));
+  }
+  assert.doesNotMatch(html, /\blet backgroundMedia(?:DataUrl|ObjectUrl|Type|FileBlob|FileExtension|NaturalWidth|NaturalHeight|OffsetX|OffsetY)\b|\blastLoadedImageElement\b/);
+});
+
 test('背景メディア', 'メタデータ取得時と再生可能時の自動再生拒否を一度だけ通知する', async () => {
   const f = backgroundFixture();
   f.video.play = async () => { throw new DOMException('Autoplay blocked', 'NotAllowedError'); };
@@ -1463,8 +2295,7 @@ function wakeLockFixture(navigator) {
   const control = {};
   const document = { visibilityState: 'visible' };
   const settings = { wakeLock: true };
-  const { updateScreenWakeLock } = load('async function releaseScreenWakeLock', 'function updateResetButtonState',
-    ['updateScreenWakeLock'], { navigator, document, screenWakeLock: null, wakeLockStatus: status, wakeLockControl: control, activeViewerSettings: settings });
+  const { updateScreenWakeLock } = load(['updateScreenWakeLock'], { navigator, document, screenWakeLock: null, wakeLockStatus: status, wakeLockControl: control, activeViewerSettings: settings });
   return { updateScreenWakeLock, document, status, control };
 }
 
@@ -1499,7 +2330,7 @@ test('テーマ・配色', 'スリープ防止のAPI非対応と取得失敗を�
 });
 
 test('ページ送り・キーボード', 'PageDownとShift+Spaceは書字方向に応じた正反対の移動量を返す', () => {
-  const { getPageScrollDelta } = load('function getPageScrollDelta', 'async function toggleFullscreen', ['getPageScrollDelta']);
+  const { getPageScrollDelta } = load(['getPageScrollDelta']);
   assert.equal(getPageScrollDelta('horizontal', 'PageDown', false, 800), 800);
   assert.equal(getPageScrollDelta('horizontal', ' ', true, 800), -800);
   assert.equal(getPageScrollDelta('vertical', 'PageDown', false, 800), -800);
@@ -1507,7 +2338,7 @@ test('ページ送り・キーボード', 'PageDownとShift+Spaceは書字方向
 });
 
 test('ページ送り・キーボード', '矢印キーは書字方向に対応する軸だけを移動する', () => {
-  const { getPageScrollDelta } = load('function getPageScrollDelta', 'async function toggleFullscreen', ['getPageScrollDelta']);
+  const { getPageScrollDelta } = load(['getPageScrollDelta']);
   assert.equal(getPageScrollDelta('horizontal', 'ArrowDown', false, 900), 300);
   assert.equal(getPageScrollDelta('horizontal', 'ArrowLeft', false, 900), null);
   assert.equal(getPageScrollDelta('vertical', 'ArrowLeft', false, 900), -300);
@@ -1515,7 +2346,7 @@ test('ページ送り・キーボード', '矢印キーは書字方向に対応�
 });
 
 test('タイトル・ファイル名', 'HTML題名、ファイルstem、既定題名の順で表示タイトルを決める', () => {
-  const { getFileStem, resolveDocumentTitle } = load('function getFileStem', 'function rgbToHex', ['getFileStem', 'resolveDocumentTitle']);
+  const { getFileStem, resolveDocumentTitle } = load(['getFileStem', 'resolveDocumentTitle']);
   assert.equal(getFileStem('作品.改訂版.md'), '作品.改訂版');
   assert.equal(resolveDocumentTitle(' HTML題名 ', '作品', '既定'), 'HTML題名');
   assert.equal(resolveDocumentTitle('', ' 作品 ', '既定'), '作品');
@@ -1523,7 +2354,7 @@ test('タイトル・ファイル名', 'HTML題名、ファイルstem、既定�
 });
 
 test('タイトル・ファイル名', 'ファイル名から拡張子だけを除去してstemを取得する', () => {
-  const { getFileStem } = load('function getFileStem', 'function rgbToHex', ['getFileStem']);
+  const { getFileStem } = load(['getFileStem']);
   assert.equal(getFileStem('novel.md'), 'novel');
   assert.equal(getFileStem('novel.revised.html'), 'novel.revised');
   assert.equal(getFileStem('README'), 'README');
@@ -1531,7 +2362,7 @@ test('タイトル・ファイル名', 'ファイル名から拡張子だけを�
 });
 
 test('タイトル・ファイル名', 'HTML題名が空白だけならstem、stemも空なら既定題名を使う', () => {
-  const { resolveDocumentTitle } = load('function getFileStem', 'function rgbToHex', ['resolveDocumentTitle']);
+  const { resolveDocumentTitle } = load(['resolveDocumentTitle']);
   assert.equal(resolveDocumentTitle('   ', '作品', 'Hitohira'), '作品');
   assert.equal(resolveDocumentTitle('', '   ', 'Hitohira'), 'Hitohira');
 });
@@ -1547,15 +2378,22 @@ const storedViewerSettings = {
   dialogueColor: '#fedcba', panelColor: '#223344', autoSync: true, fileStem: '保存名', documentTitle: '保存題名'
 };
 
-for (const { name, stored = null, savedSettings, expectedSettings, exported = false, expected = defaultStartupContent } of [
+for (const { name, stored = null, savedSettings, expectedSettings, expectedLanguage, exported = false, browserLanguage = 'ja', browserLanguages, expected = defaultStartupContent } of [
   { name: '保存済み本文がなければ既定本文を表示する', stored: null, expected: defaultStartupContent },
+  { name: '保存設定がない初回起動ではブラウザーが英語なら英語を選ぶ', stored: null, browserLanguage: 'en-US', expectedLanguage: 'en' },
+  { name: '保存済み表示言語よりブラウザーの優先言語を使用する', savedSettings: JSON.stringify({ ...storedViewerSettings, language: 'en' }), browserLanguages: ['ja-JP', 'en-US'], expectedSettings: storedViewerSettings, expectedLanguage: 'ja' },
   { name: '保存済み本文が空白だけなら既定本文を表示する', stored: ' \n ', expected: defaultStartupContent },
   { name: '保存済み本文をサニタイズして目次生成と読書位置復元に渡す', stored: storedStartupContent, expected: storedStartupContent.trim() },
   { name: '起動時に保存済み設定の全項目を適用する', savedSettings: JSON.stringify(storedViewerSettings), expectedSettings: storedViewerSettings },
   { name: '一部だけ保存された旧設定は不足する項目を既定値で補う', savedSettings: '{"fontSize":20}', expectedSettings: { ...startupDefaults, fontSize: 20 } },
   { name: '壊れた設定から既定値に戻して起動する', savedSettings: '{', expectedSettings: startupDefaults },
+  { name: '不正な保存設定を許容範囲と安全な色へ正規化する',
+    savedSettings: JSON.stringify({ fontSize: 99999, lineHeight: -1, contentWidth: 1, backgroundBlur: 99, bgColor: 'url(javascript:alert(1))', panelColor: '#12zz45', theme: 'other', writingMode: 'diagonal', language: 'fr', wakeLock: 'yes', documentTitle: 'x'.repeat(600) }),
+    expectedSettings: { ...startupDefaults, fontSize: 22, lineHeight: 1, contentWidth: 480, backgroundBlur: 24, documentTitle: 'x'.repeat(512) } },
   { name: 'エクスポートHTMLは埋め込まれた本文で起動する', stored: storedStartupContent, exported: true,
-    savedSettings: JSON.stringify(storedViewerSettings), expectedSettings: startupDefaults, expected: exportedStartupContent }
+    savedSettings: JSON.stringify(storedViewerSettings), expectedSettings: startupDefaults, expected: exportedStartupContent },
+  { name: 'エクスポートHTMLも起動したブラウザーの言語に従う', stored: storedStartupContent, exported: true,
+    browserLanguages: ['en-GB', 'ja-JP'], expectedSettings: startupDefaults, expectedLanguage: 'en', expected: exportedStartupContent }
 ]) {
   test('初期表示', name, async () => {
     const storage = new Map();
@@ -1565,14 +2403,20 @@ for (const { name, stored = null, savedSettings, expectedSettings, exported = fa
     const sanitized = [];
     const rendered = [];
     const appliedSettings = [];
+    const appliedLanguages = [];
     let deferredCallback = null;
     const content = { innerHTML: exported ? exportedStartupContent : defaultStartupContent };
-    const { STORAGE_KEYS } = load('const STORAGE_KEYS =', 'const MEDIA_DB_NAME', ['STORAGE_KEYS']);
-    const { init } = load('function resolveInitialContent', '\n  init();', ['init'], {
-      document: { documentElement: { dataset: { exported: String(exported) } }, getElementById: () => ({ textContent: '{}' }) },
+    const { STORAGE_KEYS } = load(['STORAGE_KEYS']);
+    const { init } = load(['init', 'isMediaType', 'EMBEDDED_DATA_SCHEMA_VERSION'], {
+      document: { documentElement: { dataset: { exported: String(exported) } }, getElementById: () => ({
+        textContent: JSON.stringify({ textBase64: '', textExtension: '', textMimeType: '', mediaIncluded: false,
+          mediaType: null, mediaExtension: '', mediaDataUrl: '' })
+      }) },
+      navigator: { language: browserLanguage, languages: browserLanguages },
       requestAnimationFrame(callback) { callback(); },
       setTimeout(callback) { deferredCallback = callback; return 1; },
       STORAGE_KEYS,
+      recoverSavedDataTransaction: async () => false,
       localStorage: { getItem(key) { reads.push(key); return storage.get(key) ?? null; } },
       DEFAULT_SETTINGS: startupDefaults,
       activeViewerSettings: { ...startupDefaults },
@@ -1583,9 +2427,10 @@ for (const { name, stored = null, savedSettings, expectedSettings, exported = fa
       loadImportedText: async () => null,
       refreshExportButtons() {},
       applySettings(settings) { appliedSettings.push({ ...settings }); },
+      applyLanguage(language) { appliedLanguages.push(language); },
       novelContentElement: content,
       sanitizeHTML(markup) { sanitized.push(markup); return markup.trim(); },
-      collectTableOfContentsEntries() { rendered.push(['目次', content.innerHTML]); },
+      refreshDocumentNavigation() { rendered.push(['目次', content.innerHTML]); },
       async restoreReadingPositionAfterLayout() { rendered.push(['読書位置', content.innerHTML]); },
       updateReadingState() {},
       updateResetButtonState() {},
@@ -1599,6 +2444,7 @@ for (const { name, stored = null, savedSettings, expectedSettings, exported = fa
     assert.deepEqual(sanitized, !exported && stored?.trim() ? [stored] : []);
     assert.deepEqual(rendered, [['目次', expected]]);
     assert.deepEqual(appliedSettings, [expectedSettings ?? startupDefaults]);
+    assert.deepEqual(appliedLanguages, [expectedLanguage ?? 'ja']);
     assert.equal(typeof deferredCallback, 'function');
     await deferredCallback();
     assert.deepEqual(rendered, [['目次', expected], ['読書位置', expected]]);
@@ -1627,8 +2473,7 @@ test('初期表示', '通知を更新すると閉鎖を延期し、最新の通�
   const updatedClock = timerFixture();
   const notice = { hidden: true };
   const message = {};
-  const { showErrorNotice, hideErrorNotice } = load('function showErrorNotice', 'btnCloseErrorNotice.addEventListener',
-    ['showErrorNotice', 'hideErrorNotice'], {
+  const { showErrorNotice, hideErrorNotice } = load(['showErrorNotice', 'hideErrorNotice'], {
       errorNotice: notice, errorNoticeMessage: message, errorNoticeTimer: null,
       errorNoticeTimerCancel: () => {}, errorNoticeTimerDependencies: {
         setTimeout: () => assert.fail('既定タイマーが予期せず使用されました'),
@@ -1673,15 +2518,14 @@ test('目次', '見出しから項目を作成し、選択した位置へ移動�
   Object.defineProperty(list, 'innerHTML', { set() { this.children = []; } });
   list.querySelectorAll = () => list.children.flatMap(li => li.children);
   let closed = false;
-  const { collectTableOfContentsEntries, updateActiveTableOfContentsEntry } =
-    load('function collectTableOfContentsEntries', 'function computeProgressRatio',
-      ['collectTableOfContentsEntries', 'updateActiveTableOfContentsEntry'], {
+  const { refreshDocumentNavigation, updateActiveTableOfContentsEntry } =
+    load(['refreshDocumentNavigation', 'updateActiveTableOfContentsEntry'], {
         novelContentElement: { querySelectorAll: () => headings },
         document: { createElement }, tocListEl: list,
         tableOfContentsEntries: [], activeTableOfContentsEntryId: null,
         closeAllDrawers() { closed = true; }
       });
-  collectTableOfContentsEntries();
+  refreshDocumentNavigation();
   const buttons = list.querySelectorAll();
   assert.deepEqual(buttons.map(btn => [btn.dataset.targetId, btn.dataset.level, btn.textContent]),
     [['heading-0', '1', '第一章'], ['heading-1', '3', '節']]);
@@ -1700,18 +2544,50 @@ test('目次', '見出しがない本文では空の案内を表示し、目次�
     set innerHTML(_value) { this.children = []; },
     appendChild(child) { this.children.push(child); }
   };
-  const { collectTableOfContentsEntries } = load(
-    'function collectTableOfContentsEntries', 'function computeProgressRatio',
-    ['collectTableOfContentsEntries'], {
+  const { refreshDocumentNavigation } = load(
+    ['refreshDocumentNavigation'], {
       novelContentElement: { querySelectorAll: () => [] }, tableOfContentsEntries: [], tocListEl: list,
       document: { createElement: () => ({ className: '', textContent: '' }) }
     });
 
-  collectTableOfContentsEntries();
+  refreshDocumentNavigation();
 
   assert.deepEqual(list.children.map(({ className, textContent }) => [className, textContent]), [
     ['toc-empty', '見出しが見つかりませんでした']
   ]);
+});
+
+test('目次', '見出しが300件を超える場合も分割描画を完了する', async () => {
+  const list = {
+    children: [],
+    set innerHTML(_value) { this.children = []; },
+    appendChild(child) { this.children.push(child); }
+  };
+  const createElement = () => ({
+    children: [], dataset: {}, classList: { add() {} },
+    appendChild(child) { this.children.push(child); },
+    addEventListener() {}
+  });
+  const entries = Array.from({ length: 305 }, (_, index) => ({
+    id: `heading-${index}`, level: 2, text: `見出し${index}`, element: { scrollIntoView() {} }
+  }));
+  const scheduledTimers = [];
+  const { renderTableOfContents } = load(['renderTableOfContents'], {
+    tableOfContentsEntries: entries, activeTableOfContentsEntryId: null,
+    tocListEl: list, document: { createElement },
+    setTimeout(callback) { scheduledTimers.push(callback); return scheduledTimers.length; }
+  });
+
+  renderTableOfContents();
+  assert.equal(list.children.length, 150, '最初の描画で全件を同期処理しました');
+  while (scheduledTimers.length) {
+    scheduledTimers.shift()();
+    await Promise.resolve();
+  }
+
+  assert.equal(list.children.length, 305);
+  assert.equal(list.children[0].children[0].dataset.targetId, 'heading-0');
+  assert.equal(list.children.at(-1).children[0].dataset.targetId, 'heading-304');
 });
 
 test('ページ送り', '縦書きで縦方向が優勢なホイール入力を横移動に変換する', () => {
@@ -1719,8 +2595,10 @@ test('ページ送り', '縦書きで縦方向が優勢なホイール入力を�
   let prevented = 0;
   const settings = { writingMode: 'vertical' };
   const viewer = { scrollLeft: -100, addEventListener(event, listener) { wheel = listener; } };
-  load("viewerContainer.addEventListener('wheel'", 'function resolveInitialContent', [],
-    { viewerContainer: viewer, activeViewerSettings: settings });
+  const { initializeWheelHandling } = load(['initializeWheelHandling'], {
+    viewerContainer: viewer, activeViewerSettings: settings
+  });
+  initializeWheelHandling();
   const preventDefault = () => { prevented++; };
   wheel({ deltaX: 2, deltaY: 30, preventDefault });
   assert.equal(viewer.scrollLeft, -130);
@@ -1745,7 +2623,7 @@ test('ページ送り', 'キー入力の初回移動中・継続中・ウィン�
       addEventListener: (type, listener) => { viewerListeners[type] = listener; },
       scrollBy: options => scrolls.push({ ...options }), scrollTo: options => scrolls.push({ ...options })
     };
-    load("document.addEventListener('keydown', (e) => {", "document.addEventListener('click'", [], {
+    const { initializeKeyboardHandling } = load(['initializeKeyboardHandling'], {
       document: { addEventListener: (type, listener) => { documentListeners[type] = listener; } },
       window: {
         addEventListener: (type, listener) => { windowListeners[type] = listener; },
@@ -1774,6 +2652,7 @@ test('ページ送り', 'キー入力の初回移動中・継続中・ウィン�
       openSettingsDrawer() {}, openTocDrawer() {}, settingsDrawer: { classList: { contains: () => false } },
       tocDrawer: { classList: { contains: () => false } }
     });
+    initializeKeyboardHandling();
     return { timeouts, intervals, documentListeners, windowListeners, viewerListeners, scrolls };
   };
   const keyEvent = (key, target = { closest: () => null }) => ({
@@ -1819,7 +2698,7 @@ test('ページ送り', '縦書きのキーで横移動し、HomeとEndは現在
     addEventListener() {}, scrollBy: options => scrolls.push({ ...options }),
     scrollTo: options => scrolls.push({ ...options })
   };
-  load("document.addEventListener('keydown', (e) => {", "document.addEventListener('click'", [], {
+  const { initializeKeyboardHandling } = load(['initializeKeyboardHandling'], {
     document: { addEventListener: (type, listener) => { documentListeners[type] = listener; } },
     window: { addEventListener: () => {}, setTimeout: () => 1, setInterval: () => 2, clearInterval() {} },
     setInterval: () => 2, clearInterval() {}, setTimeout: () => 1, clearTimeout() {},
@@ -1837,6 +2716,7 @@ test('ページ送り', '縦書きのキーで横移動し、HomeとEndは現在
     openSettingsDrawer() {}, openTocDrawer() {}, settingsDrawer: { classList: { contains: () => false } },
     tocDrawer: { classList: { contains: () => false } }
   });
+  initializeKeyboardHandling();
   const event = key => ({ key, target: { closest: () => null }, preventDefault() {} });
 
   documentListeners.keydown(event('ArrowLeft'));
@@ -1852,7 +2732,7 @@ test('ページ送り', 'ダブルクリックは予約したページ送りを�
   const positions = [];
   const selection = { isCollapsed: true, rangeCount: 0 };
   const register = (name, listener) => { events[name] = listener; };
-  load('let pendingPageTurnTimer', 'const handleReadingPositionChange', [], {
+  const { initializePageTurnHandling } = load(['initializePageTurnHandling', 'pendingPageTurnTimer', 'hasActiveTextSelection'], {
     window: { addEventListener: register, getSelection: () => selection, setTimeout: clock.setTimeout },
     clearTimeout: clock.clearTimeout,
     novelContentElement: { contains: () => true, addEventListener: register },
@@ -1862,6 +2742,7 @@ test('ページ送り', 'ダブルクリックは予約したページ送りを�
       scrollBy: options => positions.push({ ...options })
     }
   });
+  initializePageTurnHandling();
   const click = {
     detail: 1, target: { closest: () => null }, clientY: 300,
     stopPropagation() {}, preventDefault() { assert.fail('標準の単語選択を妨げています'); }
