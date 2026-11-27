@@ -16,6 +16,7 @@ const testingGuide = fs.readFileSync(path.join(__dirname, '..', 'docs', 'TESTING
 const decisions = fs.readFileSync(path.join(__dirname, '..', 'docs', 'DECISIONS.md'), 'utf8');
 const requirements = fs.readFileSync(path.join(__dirname, '..', 'docs', 'REQUIREMENTS.md'), 'utf8');
 const identifierConventions = fs.readFileSync(path.join(__dirname, '..', 'docs', 'IDENTIFIERS.md'), 'utf8');
+const terminology = fs.readFileSync(path.join(__dirname, '..', 'docs', 'TERMINOLOGY.md'), 'utf8');
 const testSkill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'novel-viewer-tests', 'SKILL.md'), 'utf8');
 const agents = fs.readFileSync(path.join(__dirname, '..', 'AGENTS.md'), 'utf8');
 const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
@@ -28,6 +29,7 @@ const defaultTranslate = (key, values = {}) => (localizationDictionary.ja[key] ?
 const load = (names, globals = {}) => {
   const dependencies = {
     translate: defaultTranslate,
+    currentLanguage: 'ja',
     applyLanguage() {},
     supportsVerticalWriting: true,
     resolveBrowserLanguage: languages => [...(Array.isArray(languages) ? languages : [languages])].find(language => typeof language === 'string' && /^(?:en|ja)(?:-|$)/i.test(language))?.slice(0, 2).toLowerCase() || 'ja',
@@ -85,6 +87,7 @@ test('多言語対応', '翻訳辞書を構造化し、すべての静的UIキ�
     assert.deepEqual(Object.keys(dictionary[language]).sort(), Object.keys(dictionary.en).sort(), `${language} の翻訳キーが揃っていません`);
     for (const key of Object.keys(dictionary.en)) {
       assert.equal(typeof dictionary[language][key], 'string', `${language}.${key} が文字列ではありません`);
+      assert.ok(dictionary[language][key].trim(), `${language}.${key} が空です`);
       const placeholders = value => [...value.matchAll(/\{([a-zA-Z]+)\}/g)].map(match => match[1]).sort();
       assert.deepEqual(placeholders(dictionary[language][key]), placeholders(dictionary.en[key]), `${language}.${key} の置換項目が一致しません`);
     }
@@ -96,6 +99,38 @@ test('多言語対応', '翻訳辞書を構造化し、すべての静的UIキ�
     assert.ok(dictionary.en[key], `英語訳がありません: ${key}`);
   }
   assert.equal(dictionary.en['settings.title'], 'Settings');
+  assert.match(html, /<tr><td data-i18n="help\.arrowKeys">矢印キー<\/td><td data-i18n="help\.arrows">/);
+});
+
+test('多言語対応', '用語表に定めた12言語の標準訳と辞書の用語が一致する', () => {
+  const dictionary = JSON.parse(html.match(/<script id="viewer-localization-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+  const exactGlossary = terminology.split('## 用語族')[0];
+  const rows = exactGlossary.split(/\r?\n/).filter(line => /^\| [^|]+ \|/.test(line)).slice(1);
+  assert.ok(rows.length > 0, '用語表に用語行がありません');
+  for (const row of rows) {
+    const cells = row.split('|').slice(1, -1).map(cell => cell.trim());
+    const [concept, keys, ...translations] = cells;
+    assert.equal(translations.length, Object.keys(dictionary).length, `${concept} の用語表に12言語分ありません`);
+    for (const [index, locale] of Object.keys(dictionary).entries()) {
+      for (const key of keys.split(',').map(value => value.trim().replace(/`/g, ''))) {
+        assert.equal(dictionary[locale][key], translations[index], `${locale}.${key} が用語表と異なります`);
+      }
+    }
+  }
+
+  const familyGlossary = terminology.split('## 用語族の統一')[1].split('## 運用')[0];
+  const familyRows = familyGlossary.split(/\r?\n/).filter(line => /^\| [^|]+ \|/.test(line)).slice(1);
+  assert.ok(familyRows.length > 0, '用語族の語幹行がありません');
+  for (const row of familyRows) {
+    const cells = row.split('|').slice(1, -1).map(cell => cell.trim());
+    const [family, keys, ...stems] = cells;
+    for (const [index, locale] of Object.keys(dictionary).entries()) {
+      const stem = stems[index].toLocaleLowerCase(locale);
+      for (const key of keys.split(',').map(value => value.trim().replace(/`/g, ''))) {
+        assert.ok(dictionary[locale][key].toLocaleLowerCase(locale).includes(stem), `${locale}.${key} が用語族「${family}」の標準語を含みません`);
+      }
+    }
+  }
 });
 
 test('多言語対応', '翻訳・ブラウザー言語判定・表示言語属性を更新する', () => {
@@ -140,6 +175,59 @@ test('多言語対応', '翻訳・ブラウザー言語判定・表示言語属�
   assert.equal(target.documentElement.dir, 'rtl');
   apply('fr');
   assert.equal(target.documentElement.dir, 'ltr');
+});
+
+test('多言語対応', '複数形・数値・日付を書類の表示言語で整形する', () => {
+  const dictionary = JSON.parse(html.match(/<script id="viewer-localization-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+  const english = load(['formatLocaleNumber', 'formatLocalePercent', 'formatSearchResultCount', 'formatLocaleDate'], {
+    currentLanguage: 'en', localizationData: dictionary,
+    translate: (key, values = {}) => (dictionary.en[key] || dictionary.ja[key] || key).replace(/\{([a-zA-Z]+)\}/g, (_, name) => String(values[name] ?? ''))
+  });
+  assert.equal(english.formatSearchResultCount(1), '1 result');
+  assert.equal(english.formatSearchResultCount(2), '2 results');
+  assert.equal(english.formatSearchResultCount(512, true), '512 results (first 500)');
+  assert.equal(english.formatLocaleNumber(1234.5), new Intl.NumberFormat('en').format(1234.5));
+  assert.equal(english.formatLocalePercent(50), new Intl.NumberFormat('en', { style: 'percent', maximumFractionDigits: 0 }).format(0.5));
+  assert.equal(english.formatLocaleDate(0), new Date(0).toLocaleString('en'));
+
+  const russian = load(['formatSearchResultCount'], {
+    currentLanguage: 'ru', localizationData: dictionary,
+    translate: (key, values = {}) => (dictionary.ru[key] || dictionary.ja[key] || key).replace(/\{([a-zA-Z]+)\}/g, (_, name) => String(values[name] ?? ''))
+  });
+  assert.equal(russian.formatSearchResultCount(1), '1 результат');
+  assert.equal(russian.formatSearchResultCount(2), '2 результата');
+  assert.equal(russian.formatSearchResultCount(5), '5 результатов');
+
+  for (const [locale, language] of Object.entries({ ar: 'ar', de: 'de', en: 'en', es: 'es', fr: 'fr', hi: 'hi', ja: 'ja', ko: 'ko', pt: 'pt', ru: 'ru', 'zh-Hans': 'zh-CN', 'zh-Hant': 'zh-TW' })) {
+    const localized = load(['formatLocaleNumber', 'formatLocalePercent', 'formatLocaleDate', 'formatSearchResultCount'], {
+      currentLanguage: locale, localizationData: dictionary,
+      translate: (key, values = {}) => (dictionary[locale][key] || key).replace(/\{([a-zA-Z]+)\}/g, (_, name) => String(values[name] ?? ''))
+    });
+    assert.equal(localized.formatLocaleNumber(1234.5), new Intl.NumberFormat(language).format(1234.5), `${locale} の数値書式`);
+    assert.equal(localized.formatLocalePercent(50), new Intl.NumberFormat(language, { style: 'percent', maximumFractionDigits: 0 }).format(0.5), `${locale} の百分率書式`);
+    assert.equal(localized.formatLocaleDate(0), new Date(0).toLocaleString(language), `${locale} の日付書式`);
+    assert.doesNotMatch(localized.formatSearchResultCount(2, true), /\{(?:count|limit)\}/, `${locale} の検索結果数に未置換項目があります`);
+  }
+});
+
+test('多言語対応', 'エラー通知の操作名とインポート失敗理由を翻訳定義から表示する', () => {
+  const dictionary = JSON.parse(html.match(/<script id="viewer-localization-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+  const notices = [];
+  const { reportOperationFailure, createUserFacingError, getImportFailureReason, formatImportFailureSummary } = load(
+    ['reportOperationFailure', 'createUserFacingError', 'getImportFailureReason', 'formatImportFailureSummary'], {
+      currentLanguage: 'fr', localizationData: dictionary,
+      translate: (key, values = {}) => (dictionary.fr[key] || dictionary.ja[key] || key).replace(/\{([a-zA-Z]+)\}/g, (_, name) => String(values[name] ?? '')),
+      console: { error() {} }, showErrorNotice: message => notices.push(message)
+    });
+  reportOperationFailure('operation.htmlExport', new Error('environment-specific text'));
+  assert.equal(notices[0], 'L’action « exporter le HTML » a échoué. Réessayez. Si le problème persiste, consultez la console de développement du navigateur.');
+  const known = createUserFacingError('error.readText');
+  assert.equal(getImportFailureReason(known, 'fallback'), dictionary.fr['error.readText']);
+  assert.equal(getImportFailureReason(new Error('untranslated browser exception'), dictionary.fr['error.importText']), dictionary.fr['error.importText']);
+  assert.equal(formatImportFailureSummary([
+    { kind: 'text', filename: 'roman.txt', message: dictionary.fr['error.importText'] },
+    { kind: 'unsupported', filename: 'archive.bin', message: dictionary.fr['error.unsupported'] }
+  ]), 'Certains fichiers n’ont pas pu être importés : roman.txt : Impossible de lire le fichier texte. Vérifiez qu’il n’est pas endommagé et qu’il est accessible. et archive.bin : Format de fichier non pris en charge.');
 });
 
 test('設定', '書字方向と書体の選択状態をアクセシブルな押下状態へ同期する', () => {
@@ -392,6 +480,7 @@ test('本文検索', '分割検索中に検索語が変わったら古い検索�
     searchDistinguishVariants: { checked: false }, searchResultList: resultList,
     searchResultStatus: status, btnSearchPrevious: previous, btnSearchNext: next,
     activeSearchElement: null, activeSearchResultIndex: -1, searchResults: [],
+    currentLanguage: 'ja', localizationData: localizationDictionary,
     setSearchResultStatus(text) { status.textContent = text; },
     clearActiveSearchBlock() {}, selectSearchResult() {}, reportNavigationDuration() {},
     maxSearchResults: 500,
@@ -434,13 +523,13 @@ test('本文検索', '検索ボタン・検索語・結果一覧と対象フィ�
   assert.doesNotMatch(searchDrawer, /検索語|検索語を入力/);
   assert.match(html, /id="search-include-headings"[^>]*type="checkbox" checked/);
   assert.match(html, /id="search-include-body"[^>]*type="checkbox" checked/);
-  assert.match(searchDrawer, /class="search-variant-toggle" title="英字大小・全半角を区別"[\s\S]*id="search-distinguish-variants"[^>]*aria-label="英字大小・全半角を区別"[\s\S]*<svg[^>]*aria-hidden="true"><text[^>]*>Aa<\/text><text[^>]*>ＡＡ<\/text>/);
+  assert.match(searchDrawer, /role="group" aria-label="文字種の区別"[^>]*data-i18n-aria="search\.variants"[\s\S]*<label><input id="search-distinguish-variants" type="checkbox"[^>]*data-i18n-aria="search\.variants"><span data-i18n="search\.variants">大文字・小文字と全角・半角を区別する<\/span><\/label>/);
+  assert.doesNotMatch(searchDrawer, /class="search-variant-toggle"|<svg[^>]*><text[^>]*>Aa<\/text>/);
   assert.match(html, /#search-drawer input\[type="checkbox"\]\s*\{[^}]*accent-color:\s*var\(--text-secondary\)/);
   assert.match(html, /#search-query\s*\{[^}]*min-height:\s*34px[^}]*font-size:\s*14px[^}]*\}/);
   assert.match(html, /#search-query::-[\w-]+-search-cancel-button\s*\{[^}]*filter:\s*grayscale\(1\)/);
   assert.match(html, /input:not\(\[type="checkbox"\]\):not\(\[type="range"\]\):not\(\[type="color"\]\):not\(\[type="file"\]\):focus-visible,[\s\n]*textarea:focus-visible,[\s\n]*select:focus-visible\s*\{[^}]*outline:\s*1px solid var\(--text-secondary\)/);
   assert.match(html, /#novel-content \.search-current-block\s*\{[^}]*outline:\s*1px solid var\(--text-secondary\)[^}]*outline-offset:\s*2px/);
-  assert.match(html, /\.search-variant-toggle\s*\{[^}]*width:\s*36px[^}]*height:\s*28px/);
   assert.match(html, /<ol id="search-results"[^>]*aria-label="検索結果一覧"/);
   assert.match(html, /id="btn-search-previous"[^>]*aria-label="前の検索結果へ"[^>]*>[\s\S]*?<svg[^>]*aria-hidden="true"/);
   assert.match(html, /id="btn-search-next"[^>]*aria-label="次の検索結果へ"[^>]*>[\s\S]*?<svg[^>]*aria-hidden="true"/);
@@ -813,7 +902,7 @@ test('エクスポートHTML・セキュリティ', 'ユーザー由来JSONをsc
 });
 
 test('エクスポート', 'ファイルサイズを簡潔な十進単位で整形する', () => {
-  const { formatFileSize } = load(['formatFileSize']);
+  const { formatFileSize } = load(['formatFileSize'], { currentLanguage: 'ja' });
   assert.equal(formatFileSize(5), '5 B');
   assert.equal(formatFileSize(1200), '1.2 KB');
   assert.equal(formatFileSize(5_000_000), '5 MB');
@@ -1219,7 +1308,8 @@ test('インポート・背景メディア', 'MIMEが空でも拡張子で画像
   assert.equal(fixture.mediaWrites.length, 2);
   assert.equal(fixture.mediaSelections.length, 2);
   assert.equal(fixture.notices.length, 1);
-  assert.match(fixture.notices[0], /replacement\.png.*媒体保存拒否/);
+  assert.match(fixture.notices[0], /replacement\.png.*画像・動画を読み込めませんでした/);
+  assert.doesNotMatch(fixture.notices[0], /媒体保存拒否/);
 });
 
 test('インポート・保存データ', '設定保存に失敗したら本文・位置・題名・元ファイルを以前の状態へ戻す', async () => {
@@ -1243,7 +1333,8 @@ test('インポート・保存データ', '設定保存に失敗したら本文�
   assert.equal(fixture.getExportSource().blob, previousExport.blob);
   assert.equal(fixture.originals.length, 1);
   assert.equal(fixture.notices.length, 1);
-  assert.match(fixture.notices[0], /replacement\.md.*保存拒否: settings/);
+  assert.match(fixture.notices[0], /replacement\.md.*本文を保存できませんでした/);
+  assert.doesNotMatch(fixture.notices[0], /保存拒否: settings/);
 });
 
 test('インポート・保存データ', 'IndexedDBへの元ファイル保存に失敗したら本文と設定の保存を戻す', async () => {
@@ -1268,7 +1359,8 @@ test('インポート・保存データ', 'IndexedDBへの元ファイル保存�
   assert.equal(fixture.settings.fileStem, 'original');
   assert.equal(fixture.getExportSource().blob, previousExport.blob);
   assert.equal(fixture.originals.length, 1);
-  assert.match(fixture.notices[0], /replacement\.md.*IndexedDB拒否/);
+  assert.match(fixture.notices[0], /replacement\.md.*本文を保存できませんでした/);
+  assert.doesNotMatch(fixture.notices[0], /IndexedDB拒否/);
 });
 
 test('インポート', '破損した本文と非対応ファイルを通知し、既存表示と読書位置を保つ', async () => {
@@ -1350,7 +1442,7 @@ test('エクスポートHTML内のデータ', 'Base64変換のチャンク境界
 
 test('エクスポートHTML内のデータ', 'ペイロード区切りのないデータと不正なBase64を拒否する', () => {
   const { dataUrlToBlob } = media();
-  assert.throws(() => dataUrlToBlob('data:image/png;base64'), /形式が不正/);
+  assert.throws(() => dataUrlToBlob('data:image/png;base64'), error => error.message === localizationDictionary.ja['error.embeddedMedia']);
   assert.throws(() => dataUrlToBlob('data:image/png;base64,!!!'), { name: 'InvalidCharacterError' });
 });
 
@@ -1424,15 +1516,18 @@ test('エクスポートHTML内のデータ', '埋め込みペイロードは本
 test('エクスポート', '失敗を通知して再試行を案内し、例外の詳細をログに記録する', () => {
   const notices = [];
   const logs = [];
+  const dictionary = JSON.parse(html.match(/<script id="viewer-localization-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
   const { reportOperationFailure } = load(['reportOperationFailure'], {
+    currentLanguage: 'ja', localizationData: dictionary,
+    translate: (key, values = {}) => (dictionary.ja[key] || key).replace(/\{([a-zA-Z]+)\}/g, (_, name) => String(values[name] ?? '')),
     console: { error: (...args) => logs.push(args) },
     showErrorNotice: message => notices.push(message)
   });
   const failure = new Error('保存領域へのアクセスが拒否されました');
-  reportOperationFailure('HTMLのエクスポート', failure);
+  reportOperationFailure('operation.htmlExport', failure);
   assert.match(notices[0], /HTMLのエクスポートに失敗しました。操作をやり直してください/);
   assert.ok(!notices[0].includes(failure.message));
-  assert.deepEqual(logs, [['HTMLのエクスポートに失敗しました:', failure]]);
+  assert.deepEqual(logs, [[failure]]);
 });
 
 test('エクスポート', '個別ファイル行は実行時Blobと媒体種別に応じて生成対象を決める', () => {
@@ -1888,7 +1983,7 @@ test('保存データとストレージ', '復旧マーカーに対応するInde
     MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text', SAVED_DATA_REVISION_KEY: 'hitohira_saved_data_revision'
   });
 
-  await assert.rejects(recoverSavedDataTransaction(), /記録が見つかりません/);
+  await assert.rejects(recoverSavedDataTransaction(), error => error.message === localizationDictionary.ja['error.savedDataRecovery']);
   assert.equal(saved.get('hitohira_pending_saved_data_transaction'), serialized);
 });
 
@@ -1908,7 +2003,7 @@ test('保存データとストレージ', '未知形式の復旧マーカーは�
     MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text', SAVED_DATA_REVISION_KEY: 'hitohira_saved_data_revision'
   });
 
-  await assert.rejects(recoverSavedDataTransaction(), /復旧記録が不正/);
+  await assert.rejects(recoverSavedDataTransaction(), error => error.message === localizationDictionary.ja['error.savedDataRecovery']);
   assert.equal(saved.get('hitohira_pending_saved_data_transaction'), serialized);
 });
 
@@ -1929,7 +2024,7 @@ test('保存データとストレージ', '不正なIndexedDB復旧記録を保�
     MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text', SAVED_DATA_REVISION_KEY: 'hitohira_saved_data_revision'
   });
 
-  await assert.rejects(recoverSavedDataTransaction(), /復旧記録が不正/);
+  await assert.rejects(recoverSavedDataTransaction(), error => error.message === localizationDictionary.ja['error.savedDataRecovery']);
   assert.equal(saved.get('hitohira_pending_saved_data_transaction'), serialized);
   assert.equal(storage.records.get('__pending_transaction__').version, 2);
 });
@@ -1955,7 +2050,7 @@ test('保存データとストレージ', '復旧記録の不正なキーや操�
     MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text', SAVED_DATA_REVISION_KEY: 'hitohira_saved_data_revision'
   });
 
-  await assert.rejects(recoverSavedDataTransaction(), /復旧記録が不正/);
+  await assert.rejects(recoverSavedDataTransaction(), error => error.message === localizationDictionary.ja['error.savedDataRecovery']);
   assert.equal(saved.has('hitohira_saved_data_lock'), false);
   assert.equal(storage.records.has('current_text'), false);
   assert.equal(storage.records.has('__pending_transaction__'), true);
@@ -2083,7 +2178,7 @@ test('保存データとストレージ', 'IndexedDBの初回作成・オープ�
     window: {}, MEDIA_DB_NAME: 'hitohira_media_db', MEDIA_DB_VERSION: 1,
     MEDIA_STORE_NAME: 'background_media', MEDIA_STORE_KEY: 'current', TEXT_STORE_KEY: 'current_text'
   }).openMediaDatabase;
-  await assert.rejects(unavailable(), /IndexedDB is unavailable/);
+  await assert.rejects(unavailable(), error => error.message === localizationDictionary.ja['error.storage']);
 
   const startupCalls = [];
   const restoreDeferredData = load(['restoreDeferredData'], {
@@ -2210,7 +2305,7 @@ test('初期化', '二つの元ファイルの削除が中断された場合は�
   assert.deepEqual(f.snapshot(), initial);
   assert.equal((await f.database.loadImportedText()).blob, initial.text);
   assert.equal((await f.database.loadBackgroundMedia()).blob, initial.background);
-  assert.deepEqual(f.notices, [{ label: '設定の初期化', error }]);
+  assert.deepEqual(f.notices, [{ label: 'operation.reset', error }]);
   assert.equal(f.resetButton.disabled, false);
   await f.reset();
   assert.equal(f.saved.size, 0);
@@ -2236,7 +2331,7 @@ test('個別削除', 'LocalStorageの途中で拒否されたら変更を戻し�
   assert.deepEqual(f.saved, previous);
   assert.deepEqual(f.snapshot(), initial);
   assert.equal((await f.database.loadImportedText()).blob, initial.text);
-  assert.deepEqual(f.notices, [{ label: '元ファイルの削除', error }]);
+  assert.deepEqual(f.notices, [{ label: 'operation.importDelete', error }]);
 });
 
 test('初期化', 'エクスポートHTMLでは本文・媒体の実行時状態と読書位置だけを初期化する', async () => {

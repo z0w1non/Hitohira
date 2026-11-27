@@ -7,6 +7,7 @@
 | [IDENTIFIERS.md](./IDENTIFIERS.md) | 資料間で参照する項目IDの種別接頭辞と採番規則。 |
 | [REQUIREMENTS.md](./REQUIREMENTS.md) | ユーザーが定める宣言的要求とその達成条件。 |
 | [SPECIFICATION.md](./SPECIFICATION.md) | 製品の画面、入力、表示、保存、エクスポートなどの動作仕様。 |
+| [TERMINOLOGY.md](./TERMINOLOGY.md) | 対応12言語のUI用語、代表訳、同義キー、語族の統一規則。 |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 主な状態変更の保存・実行時更新・描画・検証依存関係。 |
 | [SAVED_DATA_RECOVERY.md](./SAVED_DATA_RECOVERY.md) | 保存処理の復旧エラー時に利用者が行うことと、開発者がデータを保全して調査する手順。 |
 | [TESTING.md](./TESTING.md) | テストの実行方法、ブラウザー環境、隔離、後始末。 |

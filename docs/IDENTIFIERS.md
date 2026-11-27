@@ -6,9 +6,9 @@
 
 | 項目種別 | 接頭辞 | 正本 | 次に割り当てる番号 |
 |---|---|---|---:|
-| 宣言的要求 | `REQ` | [REQUIREMENTS.md](./REQUIREMENTS.md) | `REQ-006` |
+| 宣言的要求 | `REQ` | [REQUIREMENTS.md](./REQUIREMENTS.md) | `REQ-009` |
 | 未解決課題 | `ISS` | [ISSUES.md](./ISSUES.md) | `ISS-030` |
-| 再利用可能な知見 | `KNW` | [DEVELOPMENT_KNOWLEDGE.md](./DEVELOPMENT_KNOWLEDGE.md) | `KNW-015` |
+| 再利用可能な知見 | `KNW` | [DEVELOPMENT_KNOWLEDGE.md](./DEVELOPMENT_KNOWLEDGE.md) | `KNW-016` |
 | 設計決定 | `ADR` | [DECISIONS.md](./DECISIONS.md) | `ADR-011` |
 
 ## 共通規則
