@@ -29,6 +29,7 @@ const load = (names, globals = {}) => {
   const dependencies = {
     translate: defaultTranslate,
     applyLanguage() {},
+    supportsVerticalWriting: true,
     resolveBrowserLanguage: languages => [...(Array.isArray(languages) ? languages : [languages])].find(language => typeof language === 'string' && /^(?:en|ja)(?:-|$)/i.test(language))?.slice(0, 2).toLowerCase() || 'ja',
     MEDIA_TRANSACTION_KEY: '__pending_transaction__',
     MEDIA_STORE_KEY: 'current',
@@ -72,7 +73,7 @@ const load = (names, globals = {}) => {
   }
   return loadFunctionsFromHtml(html, names, dependencies);
 };
-const convert = () => load(['plainTextToSafeHTML']).plainTextToSafeHTML;
+const convert = (language = 'ja') => load(['plainTextToSafeHTML'], { currentLanguage: language }).plainTextToSafeHTML;
 
 test('多言語対応', '翻訳辞書を構造化し、すべての静的UIキーと英語訳を備える', () => {
   const dictionaryText = html.match(/<script id="viewer-localization-data" type="application\/json">([\s\S]*?)<\/script>/)?.[1];
@@ -172,6 +173,11 @@ test('設定', '書字方向と書体の選択状態をアクセシブルな押�
   assert.match(html, /\.icon-control-divider\s*\{[^}]*height:\s*40px/);
 });
 
+test('設定', '縦書きUIを含まない言語版では保存済み方向を横書きへ正規化する', () => {
+  const { normalizeViewerSettings } = load(['normalizeViewerSettings'], { supportsVerticalWriting: false });
+  assert.equal(normalizeViewerSettings({ writingMode: 'vertical' }, { writingMode: 'horizontal' }).writingMode, 'horizontal');
+});
+
 test('設定・保存データ', '設定変更は即時反映し、遅延保存の失敗状態と成功状態を通知する', async () => {
   const settings = { theme: 'light', fontSize: 16 };
   const writes = new Map();
@@ -264,6 +270,25 @@ test('設定・保存データ', 'ページ離脱時に保留中の設定を同�
   assert.deepEqual(cleared, [7]);
   assert.equal(persistence.pending, null);
   assert.equal(status.dataset.state, 'saved');
+});
+
+test('設定・保存データ', '保存状態を意味の分かるアイコンと支援技術向けラベルで表示する', () => {
+  const status = { dataset: {}, innerHTML: '' };
+  const { setSettingsSaveStatus } = load(['setSettingsSaveStatus'], {
+    settingsSaveStatusEl: status,
+    translate: key => ({
+      'settings.save.saving': 'Saving', 'settings.save.saved': 'Saved',
+      'settings.save.failed': 'Save failed', 'settings.save.conflict': 'Changed elsewhere'
+    })[key] || key
+  });
+  for (const [state, label] of [['saving', 'Saving'], ['saved', 'Saved'], ['failed', 'Save failed'], ['conflict', 'Changed elsewhere']]) {
+    setSettingsSaveStatus(state);
+    assert.equal(status.dataset.state, state);
+    assert.match(status.innerHTML, /<svg class="save-status-icon"[^>]*aria-hidden="true">/);
+    assert.ok(status.innerHTML.includes(`<span class="visually-hidden">${label}</span>`));
+  }
+  setSettingsSaveStatus('');
+  assert.equal(status.innerHTML, '');
 });
 
 test('設定・保存データ', 'Web Locksの空き待ちは取得可能になるまで再試行し、操作を一度だけ実行する', async () => {
@@ -372,6 +397,7 @@ test('本文検索', '検索ボタン・検索語・結果一覧と対象フィ�
   assert.match(html, /id="search-include-headings"[^>]*type="checkbox" checked/);
   assert.match(html, /id="search-include-body"[^>]*type="checkbox" checked/);
   assert.match(searchDrawer, /class="search-variant-toggle" title="英字大小・全半角を区別"[\s\S]*id="search-distinguish-variants"[^>]*aria-label="英字大小・全半角を区別"[\s\S]*<svg[^>]*aria-hidden="true"><text[^>]*>Aa<\/text><text[^>]*>ＡＡ<\/text>/);
+  assert.match(html, /#search-drawer input\[type="checkbox"\]\s*\{[^}]*accent-color:\s*var\(--text-secondary\)/);
   assert.match(html, /<ol id="search-results"[^>]*aria-label="検索結果一覧"/);
   assert.match(html, /id="btn-search-previous"[^>]*aria-label="前の検索結果へ"[^>]*>[\s\S]*?<svg[^>]*aria-hidden="true"/);
   assert.match(html, /id="btn-search-next"[^>]*aria-label="次の検索結果へ"[^>]*>[\s\S]*?<svg[^>]*aria-hidden="true"/);
@@ -610,20 +636,29 @@ test('テスト基盤', '製品の実行時ネットワーク不要方針が仕�
   assert.ok(spec.includes('実行時にネットワーク接続を要求しない'));
 });
 test('公開用配布', 'GitHubのREADMEから公開HTMLを直接ダウンロードする', () => {
-  assert.match(readme, /\[Hitohiraをダウンロード\]\(https:\/\/github\.com\/z0w1non\/Hitohira\/raw\/HEAD\/public\/hitohira\.html\?download=1\)/);
-  const downloadLink = /\]\(https:\/\/github\.com\/z0w1non\/Hitohira\/raw\/HEAD\/public\/hitohira\.html\?download=1\)/;
-  assert.match(readme.split(/\r?\n/)[0], /^\[日本語\]\(\.\/readme\/ja\/README\.md\) \| \[English\]\(\.\/readme\/en\/README\.md\)$/);
-  assert.match(japaneseReadme.split(/\r?\n/)[0], /^\[日本語\]\(\.\/README\.md\) \| \[English\]\(\.\.\/en\/README\.md\)$/);
-  assert.match(englishReadme.split(/\r?\n/)[0], /^\[日本語\]\(\.\.\/ja\/README\.md\) \| \[English\]\(\.\/README\.md\)$/);
-  assert.match(japaneseReadme, downloadLink);
-  assert.match(englishReadme, downloadLink);
+  assert.match(readme, /\[Hitohiraをダウンロード\]\(https:\/\/github\.com\/z0w1non\/Hitohira\/raw\/HEAD\/public\/hitohira-jp\.html\?download=1\)/);
+  assert.match(readme.split(/\r?\n/)[0], /\[日本語\]\(\.\/README\.md\).*\[العربية\]/);
+  assert.match(readme, /小説を1つのHTMLファイルで読むための単体型ビューアです/);
+  assert.doesNotMatch(readme, /A standalone novel viewer/);
+  assert.match(japaneseReadme.split(/\r?\n/)[0], /\[日本語\].*\[العربية\]/);
+  assert.match(englishReadme.split(/\r?\n/)[0], /\[日本語\].*\[العربية\]/);
+  assert.match(japaneseReadme.split(/\r?\n/)[0], /\[日本語\]\(\.\.\/\.\.\/README\.md\)/);
+  assert.match(englishReadme.split(/\r?\n/)[0], /\[日本語\]\(\.\.\/\.\.\/README\.md\)/);
+  assert.match(japaneseReadme, /public\/hitohira-jp\.html\?download=1/);
+  assert.match(englishReadme, /public\/hitohira-en\.html\?download=1/);
   assert.match(englishReadme, /\[Download Hitohira\]/);
   assert.match(japaneseReadme, /スクリーンショット/);
   assert.match(englishReadme, /Screenshots/);
-  assert.doesNotMatch(readme, /\]\(\.\/public\/hitohira\.html\)/);
-  assert.ok(fs.existsSync(path.join(__dirname, '..', 'public', 'hitohira.html')));
-  assert.notEqual(path.resolve(__dirname, '..', 'hitohira.html'), path.resolve(__dirname, '..', 'public', 'hitohira.html'));
-  assert.ok(spec.includes('GitHubリポジトリのトップページ'));
+  assert.doesNotMatch(readme, /public\/hitohira\.html/);
+  const locales = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'tools', 'locales.json'), 'utf8'));
+  for (const [locale, metadata] of Object.entries(locales)) {
+    const publicFile = path.join(__dirname, '..', 'public', `hitohira-${metadata.suffix}.html`);
+    assert.ok(fs.existsSync(publicFile), `${locale}の公開HTMLがありません`);
+    const languageReadme = fs.readFileSync(path.join(__dirname, '..', 'readme', locale, 'README.md'), 'utf8');
+    assert.ok(languageReadme.includes(`public/hitohira-${metadata.suffix}.html?download=1`), `${locale}のREADMEが別言語版へリンクしています`);
+    assert.match(languageReadme.split(/\r?\n/)[0], /\[日本語\]\(\.\.\/\.\.\/README\.md\)/, `${locale}のREADMEからルートの日本語READMEへ切り替えられません`);
+  }
+  assert.ok(spec.includes('日本語（同ファイル）と他11言語のREADMEへの切替リンク'));
 });
 
 test('画面構成', '静的なUIのIDは一意で、アイコンボタンに操作名がある', () => {
@@ -751,13 +786,46 @@ test('エクスポート', 'HTML生成サイズ表示の更新を遅延し連続
 
 test('公開用ビルド', '生成HTMLに実行時辞書・復元ハーネスを埋め込まない', async () => {
   const { buildMinifiedHtml } = require('../tools/generate_minified_viewer');
-  const generated = await buildMinifiedHtml(html);
+  const generated = await buildMinifiedHtml(html, 'en');
   assert.ok(generated.includes('MIT License'));
   assert.doesNotMatch(generated, /viewer-minifier-map|viewer-minified-script/);
   assert.doesNotMatch(generated, /<script\b[^>]*\bsrc\s*=/i);
   assert.doesNotMatch(generated, /<link\b[^>]*\brel\s*=\s*["']?stylesheet[^>]*\bhref\s*=/i);
   assert.ok(generated.includes('--bg-panel: #ffffff'));
+  assert.match(generated, /<html lang="en"[^>]*data-vertical-writing="false"/);
+  assert.match(generated, /"en":\{/);
+  assert.doesNotMatch(generated, /"ja":\{/);
+  assert.match(generated, /data-value="serif"[^>]*>S<\/button>/);
+  assert.match(generated, /data-value="sans"[^>]*>G<\/button>/);
+  assert.doesNotMatch(generated, /id="ctrl-writing-mode"|class="icon-control-divider"/);
+  assert.ok(generated.includes(JSON.parse(generated.match(/<script id="viewer-localization-data" type="application\/json">([\s\S]*?)<\/script>/)[1]).en['intro.summary']));
   assert.ok(Buffer.byteLength(generated) < Buffer.byteLength(html));
+});
+
+test('公開用ビルド', '各言語の公開HTMLを一辞書・対応本文・縦書き可否で生成する', () => {
+  const { localizeHtml } = require('../tools/generate_minified_viewer');
+  const locales = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'tools', 'locales.json'), 'utf8'));
+  for (const [locale, metadata] of Object.entries(locales)) {
+    const localized = localizeHtml(html, locale);
+    const dictionary = JSON.parse(localized.match(/<script id="viewer-localization-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+    assert.deepEqual(Object.keys(dictionary), [locale]);
+    assert.match(localized, new RegExp(`<html lang="${locale}"[^>]*dir="${locale === 'ar' ? 'rtl' : 'ltr'}"`));
+    assert.match(localized, new RegExp(`data-vertical-writing="${metadata.vertical}"`));
+    assert.match(localized, new RegExp(`data-value="serif"[^>]*>${metadata.fonts.serifIcon}<\\/button>`));
+    assert.match(localized, new RegExp(`data-value="sans"[^>]*>${metadata.fonts.sansIcon}<\\/button>`));
+    assert.ok(localized.includes(`--font-serif: ${metadata.fonts.serifStack};`), `${locale}の本文向けフォントスタックがありません`);
+    assert.ok(localized.includes(`--font-sans: ${metadata.fonts.sansStack};`), `${locale}のゴシック体フォントスタックがありません`);
+    assert.match(localized, /<h1[^>]*>Hitohira<\/h1>/);
+    assert.ok(localized.includes(dictionary[locale]['intro.summary']), `${locale}の既定本文が未翻訳です`);
+    if (locale !== 'ja') assert.doesNotMatch(dictionary[locale]['intro.markdown'], /[｜《》]|漢字/, `${locale}の既定本文に日本語専用ルビ記法が含まれています`);
+    assert.match(localized, new RegExp(`"settings\\.serif":"${metadata.fonts.serifLabel}"`));
+    if (metadata.vertical) assert.match(localized, /id="ctrl-writing-mode"/);
+    else {
+      assert.doesNotMatch(localized, /id="ctrl-writing-mode"|class="icon-control-divider"/);
+      assert.equal(dictionary[locale]['intro.display'], metadata.displayWithoutVertical, `${locale}の既定本文が非対応の書字方向機能を紹介しています`);
+      assert.equal(dictionary[locale]['intro.shortcuts'], metadata.shortcutsWithoutVertical, `${locale}の既定本文に非対応の書字方向操作が含まれています`);
+    }
+  }
 });
 
 test('本文表示・インポート', '見出しは6段まで変換し、7段目は文章として残す', () => {
@@ -809,11 +877,25 @@ test('本文表示・インポート', '台詞とルビを表示できる形へ�
   assert.equal(convert()('「漢字《かんじ》…」'), '<p><span class="dialogue">「<ruby>漢字<rt>かんじ</rt></ruby><span class="ellipsis">…</span>」</span></p>');
 });
 
+test('本文表示・インポート', 'HTMLルビ記法と日本語向け入力記法を安全な本文へ変換する', () => {
+  const convertJapanese = load(['plainTextToSafeHTML'], { currentLanguage: 'ja' }).plainTextToSafeHTML;
+  assert.equal(convertJapanese('<ruby>漢字<rt>かんじ</rt></ruby>'), '<p><ruby>漢字<rt>かんじ</rt></ruby></p>');
+  assert.equal(convertJapanese('｜今日《こんにち》 漢字《かんじ》'), '<p><ruby>今日<rt>こんにち</rt></ruby> <ruby>漢字<rt>かんじ</rt></ruby></p>');
+  assert.equal(convertJapanese('<ruby onclick="alert(1)">base<rt>note</rt></ruby>'), '<p>&lt;ruby onclick="alert(1)"&gt;base<rt>note</rt></ruby></p>');
+  assert.equal(convertJapanese('<script>bad</script>'), '<p>&lt;script&gt;bad&lt;/script&gt;</p>');
+});
+
+test('本文表示・インポート', '日本語以外ではHTMLルビを扱い日本語専用入力記法を変換しない', () => {
+  const convertEnglish = load(['plainTextToSafeHTML'], { currentLanguage: 'en' }).plainTextToSafeHTML;
+  assert.equal(convertEnglish('<ruby>漢字<rt>かんじ</rt></ruby>'), '<p><ruby>漢字<rt>かんじ</rt></ruby></p>');
+  assert.equal(convertEnglish('｜今日《こんにち》 漢字《かんじ》'), '<p>｜今日《こんにち》 漢字《かんじ》</p>');
+});
+
 test('本文表示・インポート', '長い漢字の連続や空白を含む本文でもルビと段落を保つ', () => {
   const kanji = '漢'.repeat(65536);
   const spaces = ' '.repeat(32768);
   const input = `${kanji}。漢字《かんじ》\n${spaces}本文\n次の段落`;
-  assert.equal(convert()(input), `<p>${kanji}。<ruby>漢字<rt>かんじ</rt></ruby></p>\n<p>本文</p>\n<p>次の段落</p>`);
+  assert.equal(convert('ja')(input), `<p>${kanji}。<ruby>漢字<rt>かんじ</rt></ruby></p>\n<p>本文</p>\n<p>次の段落</p>`);
 });
 
 test('本文表示・インポート', '対応する相対・外部リンクを変換する', () => {

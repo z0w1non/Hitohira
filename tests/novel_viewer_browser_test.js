@@ -1708,7 +1708,7 @@ async function main() {
     const minifierProfile = path.join(profile, 'minifier-profile');
     await closeBrowser(send);
     fs.rmSync(path.join(profile, 'DevToolsActivePort'), { force: true });
-    const minifierUrl = pathToFileURL(path.join(root, 'public', 'hitohira.html')).href;
+    const minifierUrl = pathToFileURL(path.join(root, 'public', 'hitohira-jp.html')).href;
     const offlineDownloadPath = path.join(profile, 'offline-downloads');
     fs.mkdirSync(offlineDownloadPath);
     await connectIsolated(minifierUrl, minifierProfile, {
@@ -1767,6 +1767,9 @@ async function main() {
         assert.doesNotMatch(exportedHtml, /<script\b[^>]*\bsrc\s*=/i, 'オフラインHTMLに外部スクリプト参照が含まれます');
         assert.doesNotMatch(exportedHtml, /<link\b[^>]*\brel\s*=\s*["']?stylesheet[^>]*\bhref\s*=/i, 'オフラインHTMLに外部スタイル参照が含まれます');
         assert.doesNotMatch(exportedHtml, /<(?:html|body|video)\b[^>]*\bblob:/i, 'オフラインHTMLに実行元Blob URLが残っています');
+        const exportedDictionary = JSON.parse(exportedHtml.match(/<script id="viewer-localization-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+        assert.deepEqual(Object.keys(exportedDictionary), ['ja'], 'エクスポートHTMLへ複数言語の辞書が複製されています');
+        assert.match(exportedHtml, /<html\b[^>]*\blang="ja"/i, 'エクスポートHTMLの言語タグが元の版と一致しません');
         const downloadData = JSON.parse(exportedHtml.match(/<script[^>]+id="viewer-download-data"[^>]*>([\s\S]*?)<\/script>/)[1]);
         assert.deepEqual(Buffer.from(downloadData.textBase64, 'base64'), fs.readFileSync(textFixture), 'オフラインHTMLの埋め込み元ファイルが元バイト列と一致しません');
         await waitForOffline('document.getElementById("html-export-size").textContent !== "計算中"', 'オフラインHTMLのサイズ表示を計算できません');
@@ -1779,6 +1782,31 @@ async function main() {
       }
     });
     record('公開用ビルド', '公開用圧縮版をオフラインで起動');
+    const publicLocales = JSON.parse(fs.readFileSync(path.join(root, 'tools', 'locales.json'), 'utf8'));
+    for (const [locale, metadata] of Object.entries(publicLocales)) {
+      const localeUrl = pathToFileURL(path.join(root, 'public', `hitohira-${metadata.suffix}.html`)).href;
+      await connectIsolated(localeUrl, path.join(profile, `locale-${metadata.suffix}-profile`), {
+        offline: true,
+        exercise: async ({ evaluate: localeEvaluate }) => {
+          for (let i = 0; i < 100; i++) {
+            if (await localeEvaluate('document.readyState === "complete" && !!document.getElementById("novel-content")')) break;
+            await sleep(50);
+          }
+          assert.equal(await localeEvaluate('document.documentElement.lang'), locale, `${locale}版の言語属性が一致しません`);
+          assert.equal(await localeEvaluate('document.documentElement.dir'), locale === 'ar' ? 'rtl' : 'ltr', `${locale}版の表示方向が一致しません`);
+          assert.equal(await localeEvaluate('navigator.onLine'), false, `${locale}版のオフライン起動状態が不正です`);
+          assert.deepEqual(await localeEvaluate('Object.keys(JSON.parse(document.getElementById("viewer-localization-data").textContent))'), [locale], `${locale}版に複数言語の辞書が残っています`);
+          assert.equal(await localeEvaluate('document.querySelector("#ctrl-font [data-value=serif]").textContent.trim()'), metadata.fonts.serifIcon, `${locale}版の本文書体アイコンが不一致です`);
+          assert.equal(await localeEvaluate('document.querySelector("#ctrl-font [data-value=sans]").textContent.trim()'), metadata.fonts.sansIcon, `${locale}版のゴシック体アイコンが不一致です`);
+          assert.equal(await localeEvaluate('document.querySelector("#ctrl-font [data-value=serif]").getAttribute("aria-label")'), metadata.fonts.serifLabel, `${locale}版の本文書体名が不一致です`);
+          assert.equal(await localeEvaluate('document.querySelector("#ctrl-font [data-value=sans]").getAttribute("aria-label")'), metadata.fonts.sansLabel, `${locale}版のゴシック体名が不一致です`);
+          assert.equal(await localeEvaluate('!!document.getElementById("ctrl-writing-mode")'), metadata.vertical, `${locale}版の縦書きコントロール有無が不正です`);
+          assert.equal(await localeEvaluate('!!document.querySelector(".icon-control-divider")'), metadata.vertical, `${locale}版の区切り線有無が不正です`);
+          assert.ok(await localeEvaluate('document.getElementById("novel-content").textContent.trim().length > 50'), `${locale}版の既定本文が空です`);
+        }
+      });
+    }
+    record('公開用ビルド', '12言語別の辞書・既定本文・フォント・縦書き設定をオフライン確認');
     if (!exportedVideoHtml) {
       console.log('[  SKIPPED ] 動画を含むHTMLの独立起動（NOVEL_VIEWER_POLICY_TESTS=1で実行）');
     } else {

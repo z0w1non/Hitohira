@@ -1,6 +1,6 @@
 # Third-party tool licenses
 
-The following packages are used only by the development-time public HTML build (`tools/generate_minified_viewer.js`). They are not bundled into `hitohira.html` or `public/hitohira.html`, and the viewer does not load them at runtime. Versions and license texts below were checked against the installed package metadata and license files.
+The following packages are used only by the development-time public HTML build (`tools/generate_minified_viewer.js`). They are not bundled into `hitohira.html` or the generated `public/hitohira-<suffix>.html` files, and the viewer does not load them at runtime. Versions and license texts below were checked against the installed package metadata and license files.
 ## terser 5.51.4
 
 Copyright 2012-2018 (c) Mihai Bazon <mihai.bazon@gmail.com>

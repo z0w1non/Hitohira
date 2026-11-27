@@ -9,17 +9,18 @@ description: Hitohiraの編集用HTMLから、実行時の圧縮器や復元コ�
 
 - 編集・開発対象はリポジトリ直下の`hitohira.html`とする。ソースHTMLへミニファイ機能や復元用辞書を埋め込まない。
 - このスキルは`hitohira.html`を変更するすべての作業で適用する。各変更後、テストや完了報告の前に必ず公開用HTMLを再生成する。
-- 公開成果物は`public/hitohira.html`とし、`tools/generate_minified_viewer.js`で生成する。名前が同じでも、ルートの開発用`hitohira.html`と`public/hitohira.html`は別ファイルである。
-- `public/hitohira.html`は生成物として扱い、直接編集しない。
-- GitHubリポジトリのトップページに表示されるルート`README.md`から、GitHubのrawダウンロードURLで公開用HTMLを直接ダウンロードできるようにする。コード閲覧ページへの相対リンクにせず、READMEのダウンロード表示名は「Hitohiraをダウンロード」とする。
+- 公開成果物は12言語別の`public/hitohira-<suffix>.html`とし、`tools/generate_minified_viewer.js`で生成する。接尾辞は`jp`、`en`、`zh-cn`、`zh-tw`、`es`、`fr`、`de`、`pt`、`kr`、`ru`、`ar`、`hi`とする。
+- 各公開HTMLには対象言語の辞書だけを残し、`lang`・`dir`・本文フォントスタック・フォント名と頭文字アイコン・既定本文を一致させる。公開HTMLを直接編集しない。
+- 日本語・中国語版には縦書き設定を残し、他言語版では設定グループと区切り線を出力HTMLから除去する。
+- GitHubリポジトリのトップページに表示されるルート`README.md`および言語別READMEから、対応する公開HTMLをGitHub rawダウンロードURLで取得できるようにする。コード閲覧ページへの相対リンクにせず、表示言語に対応するファイル名を指す。
 
 ## ビルド手順
 
 1. Node.jsとnpmを用意し、依存関係が未導入の場合はリポジトリルートで`npm ci`を実行する。依存の正確なバージョンは`package-lock.json`で固定する。
 2. `npm run build:public`を実行する。`hitohira.html`を変更した作業では、この工程を省略しない。
-3. `public/hitohira.html`が更新され、出力するファイル名、入力・出力バイト数、削減量、削減率が妥当であることを確認する。生成物も変更差分へ含める。
-4. 生成HTMLにMITライセンス表記が完全に残り、ランタイム圧縮器・辞書・復元ハーネスが含まれないことを確認する。
-5. `pwsh -File tests/run_tests.ps1 -Suite unit`、続けて`pwsh -File tests/run_tests.ps1 -Suite browser`を実行する。動的ポートで起動したブラウザーのネットワークを遮断し、公開用HTMLの起動、本文・設定・元ファイルの読み込み、保存と再読み込み後の復元、HTMLエクスポートを確認する。外部接続が失敗し、アプリ操作中にHTTP(S)要求がなく、出力HTMLに外部スクリプト・スタイルシートや実行元Blob URLが含まれないことを検証する。エクスポートされたHTMLも圧縮状態を保つことを確認する。サンドボックス無効化が必要な隔離環境だけ、各テストコマンドへ`-DisableSandbox`を明示する。
+3. 12ファイルが更新され、それぞれ言語接尾辞・入力/出力バイト数が正しいことを確認する。生成物も変更差分へ含める。
+4. それぞれの生成HTMLが一言語の辞書だけを持ち、既定本文・フォント設定・書字方向設定が対象言語の仕様に合うことを確認する。MITライセンス表記が完全に残り、ランタイム圧縮器・辞書選択器・復元ハーネスが含まれないことも確認する。
+5. `pwsh -File tests/run_tests.ps1 -Suite unit`を実行する。利用者が明示指示した場合は、続けて`pwsh -File tests/run_tests.ps1 -Suite browser`を実行する。ブラウザーテストでは各言語版の起動、言語固定、縦書きUI有無、オフライン動作を確認する。動的ポートで起動し、外部接続が失敗し、出力HTMLに外部スクリプト・スタイルシートや実行元Blob URLが含まれないことを検証する。ブラウザー操作テストはサンドボックスを有効にする。
 
 ## 変換条件
 

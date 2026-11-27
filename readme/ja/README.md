@@ -1,4 +1,4 @@
-[日本語](./README.md) | [English](../en/README.md)
+[日本語](../../README.md) | [English](../en/README.md) | [Español](../es/README.md) | [简体中文](../zh-Hans/README.md) | [繁體中文](../zh-Hant/README.md) | [Français](../fr/README.md) | [Deutsch](../de/README.md) | [Português](../pt/README.md) | [한국어](../ko/README.md) | [Русский](../ru/README.md) | [हिन्दी](../hi/README.md) | [العربية](../ar/README.md)
 
 <p align="center">
   <img src="../../assets/hitohira-leaf.png" alt="Hitohiraの葉アイコン" width="88">
@@ -7,6 +7,8 @@
 # Hitohira
 
 小説を1つのHTMLファイルで読むための単体型ビューアです。TXT・Markdown・HTMLの読み込み、縦書き・横書き、背景メディア、目次、読書位置の保存、HTMLエクスポートに対応しています。
+
+各言語版のHTMLはそれぞれの表示言語に固定され、既定本文も同じ言語です。
 
 ## スクリーンショット
 
@@ -20,6 +22,10 @@
 
 ## ダウンロード
 
-[Hitohiraをダウンロード](https://github.com/z0w1non/Hitohira/raw/HEAD/public/hitohira.html?download=1)
+[Hitohiraをダウンロード](https://github.com/z0w1non/Hitohira/raw/HEAD/public/hitohira-jp.html?download=1)
 
 ダウンロードしたHTMLをブラウザーで開いてください。利用時のネットワーク接続は不要です。
+
+## ルビ
+
+本文にHTMLの`<ruby>漢字<rt>かんじ</rt></ruby>`を記述すると、注記付きで表示できます。TXT・Markdownでは属性のない`ruby`・`rt`・`rp`タグを使用してください。日本語表示に限り、`｜今日《こんにち》`や`漢字《かんじ》`の簡易記法も使えます。

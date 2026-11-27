@@ -8,8 +8,8 @@
 |---|---|---|---:|
 | 宣言的要求 | `REQ` | [REQUIREMENTS.md](./REQUIREMENTS.md) | `REQ-006` |
 | 未解決課題 | `ISS` | [ISSUES.md](./ISSUES.md) | `ISS-030` |
-| 再利用可能な知見 | `KNW` | [DEVELOPMENT_KNOWLEDGE.md](./DEVELOPMENT_KNOWLEDGE.md) | `KNW-014` |
-| 設計決定 | `ADR` | [DECISIONS.md](./DECISIONS.md) | `ADR-010` |
+| 再利用可能な知見 | `KNW` | [DEVELOPMENT_KNOWLEDGE.md](./DEVELOPMENT_KNOWLEDGE.md) | `KNW-015` |
+| 設計決定 | `ADR` | [DECISIONS.md](./DECISIONS.md) | `ADR-011` |
 
 ## 共通規則
 
