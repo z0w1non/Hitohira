@@ -4119,6 +4119,11 @@ SOFTWARE.
     novelContentElement.addEventListener('dblclick', cancelPendingPageTurn);
   }
 
+  function initializeViewerInputHandling() {
+    initializeKeyboardHandling();
+    initializePageTurnHandling();
+  }
+
   function handleViewerPageTurnClick(event) {
     if (!novelContentElement.contains(event.target)) {
       return;
@@ -4417,7 +4422,7 @@ SOFTWARE.
     scheduleHtmlExportSizeUpdate();
   }
 
-  initializeKeyboardHandling();
+  initializeViewerInputHandling();
   init();
 })();
 </script>

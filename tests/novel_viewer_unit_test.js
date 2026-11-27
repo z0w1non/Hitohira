@@ -2917,6 +2917,41 @@ test('ページ送り', 'ダブルクリックは予約したページ送りを�
   assert.deepEqual(selection, { isCollapsed: false, rangeCount: 1 });
 });
 
+test('ページ送り', 'ビューアの入力初期化を通じて本文クリックページ送りを登録し実行する', async () => {
+  const clock = timerFixture();
+  const documentEvents = {};
+  const windowEvents = {};
+  const contentEvents = {};
+  const scrolls = [];
+  const { initializeViewerInputHandling } = load(['initializeViewerInputHandling', 'stopHeldScroll', 'hasActiveTextSelection', 'pendingPageTurnTimer'], {
+    document: { addEventListener: (name, listener) => { documentEvents[name] = listener; } },
+    window: {
+      addEventListener: (name, listener) => { windowEvents[name] = listener; },
+      getSelection: () => ({ isCollapsed: true, rangeCount: 0 }),
+      setTimeout: clock.setTimeout
+    },
+    clearTimeout: clock.clearTimeout,
+    novelContentElement: { contains: () => true, addEventListener: (name, listener) => { contentEvents[name] = listener; } },
+    activeViewerSettings: { writingMode: 'horizontal' },
+    viewerContainer: {
+      clientHeight: 400,
+      getBoundingClientRect: () => ({ top: 0, height: 400 }),
+      scrollBy: options => scrolls.push({ ...options })
+    }
+  });
+
+  initializeViewerInputHandling();
+  assert.equal(typeof windowEvents.click, 'function');
+  assert.equal(typeof contentEvents.dblclick, 'function');
+  assert.equal(typeof documentEvents.keydown, 'function');
+  windowEvents.click({
+    detail: 1, target: { closest: () => null }, clientY: 300,
+    stopPropagation() {}, preventDefault() { assert.fail('単一クリックのページ送りを抑止しました'); }
+  });
+  await clock.run();
+  assert.deepEqual(scrolls, [{ top: 300, behavior: 'smooth' }]);
+});
+
 async function main() {
 let passed = 0;
   for (const { suite, name, run } of tests) {
