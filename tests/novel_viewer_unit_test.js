@@ -78,7 +78,16 @@ test('多言語対応', '翻訳辞書を構造化し、すべての静的UIキ�
   const dictionaryText = html.match(/<script id="viewer-localization-data" type="application\/json">([\s\S]*?)<\/script>/)?.[1];
   assert.ok(dictionaryText, '翻訳辞書がHTML内にありません');
   const dictionary = JSON.parse(dictionaryText);
-  assert.deepEqual(Object.keys(dictionary).sort(), ['en', 'ja']);
+  const supportedLanguages = ['ar', 'de', 'en', 'es', 'fr', 'hi', 'ja', 'ko', 'pt', 'ru', 'zh-Hans', 'zh-Hant'];
+  assert.deepEqual(Object.keys(dictionary).sort(), supportedLanguages.sort());
+  for (const language of supportedLanguages) {
+    assert.deepEqual(Object.keys(dictionary[language]).sort(), Object.keys(dictionary.en).sort(), `${language} の翻訳キーが揃っていません`);
+    for (const key of Object.keys(dictionary.en)) {
+      assert.equal(typeof dictionary[language][key], 'string', `${language}.${key} が文字列ではありません`);
+      const placeholders = value => [...value.matchAll(/\{([a-zA-Z]+)\}/g)].map(match => match[1]).sort();
+      assert.deepEqual(placeholders(dictionary[language][key]), placeholders(dictionary.en[key]), `${language}.${key} の置換項目が一致しません`);
+    }
+  }
   const keys = [...html.matchAll(/\bdata-i18n(?:-aria|-title|-placeholder)?="([^"]+)"/g)].map(match => match[1]);
   keys.push(...[...html.matchAll(/\btranslate\(['"]([^'"]+)['"]/g)].map(match => match[1]));
   for (const key of new Set(keys)) {
@@ -98,9 +107,16 @@ test('多言語対応', '翻訳・ブラウザー言語判定・表示言語属�
   assert.equal(translate('bookmark.delete', { name: 'Start' }), 'Delete bookmark "Start"');
   assert.equal(resolveBrowserLanguage('en-US'), 'en');
   assert.equal(resolveBrowserLanguage('ja-JP'), 'ja');
-  assert.equal(resolveBrowserLanguage(['fr-FR', 'en-US', 'ja-JP']), 'en');
-  assert.equal(resolveBrowserLanguage(['fr-FR', 'ja-JP']), 'ja');
-  assert.equal(resolveBrowserLanguage('fr'), 'ja');
+  assert.equal(resolveBrowserLanguage(['fr-FR', 'en-US', 'ja-JP']), 'fr');
+  assert.equal(resolveBrowserLanguage(['it-IT', 'ja-JP']), 'ja');
+  assert.equal(resolveBrowserLanguage('es-MX'), 'es');
+  assert.equal(resolveBrowserLanguage('pt-BR'), 'pt');
+  assert.equal(resolveBrowserLanguage('ru-RU'), 'ru');
+  assert.equal(resolveBrowserLanguage('ar-SA'), 'ar');
+  assert.equal(resolveBrowserLanguage('hi-IN'), 'hi');
+  assert.equal(resolveBrowserLanguage('zh-CN'), 'zh-Hans');
+  assert.equal(resolveBrowserLanguage('zh-TW'), 'zh-Hant');
+  assert.equal(resolveBrowserLanguage('zh-Hant-HK'), 'zh-Hant');
   assert.equal(resolveBrowserLanguage([]), 'ja');
   assert.doesNotMatch(html, /id="ctrl-language"/, '表示言語の手動選択UIが残っています');
 
@@ -119,6 +135,10 @@ test('多言語対応', '翻訳・ブラウザー言語判定・表示言語属�
   assert.equal(aria['aria-label'], 'Open settings');
   assert.equal(titled.title, 'Close');
   assert.equal(placeholder.placeholder, 'Search the text');
+  apply('ar');
+  assert.equal(target.documentElement.dir, 'rtl');
+  apply('fr');
+  assert.equal(target.documentElement.dir, 'ltr');
 });
 
 test('設定', '書字方向と書体の選択状態をアクセシブルな押下状態へ同期する', () => {

@@ -389,22 +389,35 @@ async function main() {
     }, { timeoutMs: 5000, intervalMs: 50, message: 'HTMLエクスポートサイズの計算が完了しません' });
     assert.match(initialExportSize, /^\d+(?:\.\d+)? (?:B|KB|MB|GB|TB)$/);
     record('起動・初期化', '対象HTMLの読み込みとDOM初期化');
-    const englishLanguageScript = await send('Page.addScriptToEvaluateOnNewDocument', { source: `Object.defineProperty(Object.getPrototypeOf(navigator), 'languages', { configurable: true, get: () => ['en-US', 'ja-JP'] }); Object.defineProperty(Object.getPrototypeOf(navigator), 'language', { configurable: true, get: () => 'en-US' });` });
+    const browserLanguageCases = [
+      { tag: 'en-US', lang: 'en', label: 'Open settings' },
+      { tag: 'ja-JP', lang: 'ja', label: '設定を開く' },
+      { tag: 'zh-CN', lang: 'zh-Hans', label: '打开设置' },
+      { tag: 'zh-TW', lang: 'zh-Hant', label: '開啟設定' },
+      { tag: 'es-MX', lang: 'es', label: 'Abrir configuración' },
+      { tag: 'fr-FR', lang: 'fr', label: 'Ouvrir les paramètres' },
+      { tag: 'de-DE', lang: 'de', label: 'Einstellungen öffnen' },
+      { tag: 'pt-BR', lang: 'pt', label: 'Abrir configurações' },
+      { tag: 'ko-KR', lang: 'ko', label: '설정 열기' },
+      { tag: 'ru-RU', lang: 'ru', label: 'Открыть настройки' },
+      { tag: 'ar-SA', lang: 'ar', label: 'فتح الإعدادات', dir: 'rtl' },
+      { tag: 'hi-IN', lang: 'hi', label: 'सेटिंग खोलें' }
+    ];
     await evaluate(`localStorage.setItem('hitohira_settings', JSON.stringify({ language: 'ja' }))`);
-    await send('Page.reload', { ignoreCache: true });
-    await waitForCondition(() => evaluate('document.documentElement.lang === "en"'), {
-      timeoutMs: 5000, intervalMs: 50, message: '保存済み言語設定よりブラウザー優先言語を反映しません'
-    });
-    assert.equal(await evaluate('document.getElementById("btn-open-settings").getAttribute("aria-label")'), 'Open settings');
-    assert.equal(await evaluate('document.getElementById("ctrl-language")'), null, '手動の表示言語選択UIが残っています');
-    await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: englishLanguageScript.identifier });
-    const japaneseLanguageScript = await send('Page.addScriptToEvaluateOnNewDocument', { source: `Object.defineProperty(Object.getPrototypeOf(navigator), 'languages', { configurable: true, get: () => ['ja-JP', 'en-US'] }); Object.defineProperty(Object.getPrototypeOf(navigator), 'language', { configurable: true, get: () => 'ja-JP' });` });
-    await send('Page.reload', { ignoreCache: true });
-    await waitForCondition(() => evaluate('document.documentElement.lang === "ja"'), {
-      timeoutMs: 5000, intervalMs: 50, message: '再起動後に変更されたブラウザー優先言語へ追従しません'
-    });
-    assert.equal(await evaluate('document.getElementById("btn-open-settings").getAttribute("aria-label")'), '設定を開く');
-    await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: japaneseLanguageScript.identifier });
+    for (const { tag, lang, label, dir = 'ltr' } of browserLanguageCases) {
+      const script = await send('Page.addScriptToEvaluateOnNewDocument', { source: `Object.defineProperty(Object.getPrototypeOf(navigator), 'languages', { configurable: true, get: () => [${JSON.stringify(tag)}, 'en-US'] }); Object.defineProperty(Object.getPrototypeOf(navigator), 'language', { configurable: true, get: () => ${JSON.stringify(tag)} });` });
+      await send('Page.reload', { ignoreCache: true });
+      await waitForCondition(() => evaluate(`document.documentElement.lang === ${JSON.stringify(lang)}`), {
+        timeoutMs: 5000, intervalMs: 50, message: `ブラウザー言語 ${tag} に対応する表示へ切り替わりません`
+      });
+      assert.equal(await evaluate('document.getElementById("btn-open-settings").getAttribute("aria-label")'), label, `${tag} の設定ボタン名が翻訳されません`);
+      assert.equal(await evaluate('document.documentElement.dir'), dir, `${tag} の表示方向が正しくありません`);
+      if (tag === 'en-US') {
+        assert.equal(await evaluate('document.getElementById("ctrl-language")'), null, '手動の表示言語選択UIが残っています');
+        assert.equal(await evaluate('localStorage.getItem("hitohira_settings")'), JSON.stringify({ language: 'ja' }), '旧言語設定が変更されました');
+      }
+      await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: script.identifier });
+    }
     await evaluate('localStorage.removeItem("hitohira_settings")');
     await send('Page.reload', { ignoreCache: true });
     await waitForCondition(() => evaluate('document.documentElement.lang === "ja" && document.getElementById("error-notice").hidden'), {
