@@ -1142,6 +1142,37 @@ async function main() {
     assert.equal(await evaluate('document.activeElement.id'), 'settings-drawer', '設定ドロワーを開いてパネルへフォーカスしません');
     assert.equal(await evaluate('document.getElementById("settings-drawer").getAttribute("aria-hidden")'), 'false');
     record('設定', 'Sで設定ドロワーを開く');
+    const savedStatusAppearance = await evaluate(`(() => {
+      const status = document.getElementById('settings-save-status');
+      const icon = status.querySelector('svg');
+      const rect = icon?.getBoundingClientRect();
+      return {
+        state: status.dataset.state,
+        display: icon && getComputedStyle(icon).display,
+        color: icon && getComputedStyle(status).color,
+        width: rect?.width,
+        height: rect?.height
+      };
+    })()`);
+    assert.deepEqual(savedStatusAppearance, { state: 'saved', display: 'block', color: 'rgb(24, 121, 78)', width: 24, height: 24 },
+      `起動時の保存済みアイコンが見えません: ${JSON.stringify(savedStatusAppearance)}`);
+    await evaluate(`(() => {
+      const original = Storage.prototype.setItem;
+      window.__restoreStorageWrite = () => { Storage.prototype.setItem = original; };
+      Storage.prototype.setItem = function(key, value) {
+        if (key === 'hitohira_settings') throw new DOMException('blocked', 'QuotaExceededError');
+        return original.call(this, key, value);
+      };
+      const input = document.getElementById('ctrl-content-width');
+      input.value = '740';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    await waitForCondition(() => evaluate(`document.getElementById('settings-save-status').dataset.state === 'failed' &&
+      getComputedStyle(document.getElementById('settings-save-status')).color === 'rgb(180, 35, 24)'`), {
+      timeoutMs: 3000, intervalMs: 50, message: '保存失敗アイコンの赤色と状態が表示されません'
+    });
+    await evaluate('window.__restoreStorageWrite()');
+    record('設定', '保存済み・保存失敗アイコンの表示色と寸法');
     await evaluate('(() => { const input = document.getElementById("ctrl-content-width"); input.value = "760"; input.dispatchEvent(new Event("input", { bubbles: true })); })()');
     assert.equal(await evaluate('document.getElementById("ctrl-content-width").value'), '760', '本文幅スライダーを操作できません');
     record('設定', '本文幅スライダー');
@@ -1842,6 +1873,24 @@ async function main() {
     assert.equal(await evaluate('document.getElementById("btn-export-html").disabled'), false);
     record('エクスポート', '元ブラウザーを終了し、新規プロファイルでHTML単体の起動と元ファイルの一致を確認');
     }
+
+    await send('Page.navigate', { url: fileUrl });
+    await waitForCondition(() => evaluate('location.href === ' + JSON.stringify(fileUrl) + ' && document.readyState === "complete" && !!document.getElementById("settings-save-status")'), {
+      timeoutMs: 5000, intervalMs: 50, message: '保存競合表示の検証用ビューアを開けません'
+    });
+    await evaluate(`window.dispatchEvent(new StorageEvent('storage', { key: 'hitohira_settings', newValue: '{}' }))`);
+    const conflictStatusAppearance = await waitForCondition(async () => {
+      const appearance = await evaluate(`(() => {
+        const status = document.getElementById('settings-save-status');
+        const icon = status.querySelector('svg');
+        const rect = icon?.getBoundingClientRect();
+        return { state: status.dataset.state, color: icon && getComputedStyle(status).color,
+          width: rect?.width, height: rect?.height };
+      })()`);
+      return appearance.state === 'conflict' ? appearance : false;
+    }, { timeoutMs: 3000, intervalMs: 50, message: '競合アイコンが表示されません' });
+    assert.deepEqual(conflictStatusAppearance, { state: 'conflict', color: 'rgb(138, 90, 0)', width: 24, height: 24 });
+    record('設定', '別タブ競合アイコンの状態・色・寸法');
 
     const total = [...categories.values()].reduce((count, cases) => count + cases.length, 0);
     if (process.env.NOVEL_VIEWER_TEST_TIMINGS === '1') {

@@ -59,6 +59,9 @@ SOFTWARE.
     --text-primary: #1c1c1c;
     --text-secondary: #595959;
     --text-muted: #949494;
+    --save-status-success: #18794e;
+    --save-status-error: #b42318;
+    --save-status-warning: #8a5a00;
     --border-color: #dcdcdc;
     --segment-bg: #e8e8e8;
     --segment-border: #c8c8c8;
@@ -77,6 +80,9 @@ SOFTWARE.
     --text-primary: #e3e3e3;
     --text-secondary: #a3a3a3;
     --text-muted: #666666;
+    --save-status-success: #75d69c;
+    --save-status-error: #ff7b72;
+    --save-status-warning: #f2cc60;
     --border-color: #262626;
     --segment-bg: #303030;
     --segment-border: #555555;
@@ -388,34 +394,35 @@ SOFTWARE.
     transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s, background-color 0.2s ease, color 0.2s ease;
   }
 
-  .search-controls { display: grid; gap: 12px; }
+  .search-controls { display: grid; gap: 8px; }
   .search-query-label { font-size: 12px; color: var(--text-secondary); }
   #search-query {
     width: 100%;
-    min-height: 38px;
-    padding: 8px 10px;
+    min-height: 34px;
+    padding: 6px 8px;
     color: var(--text-primary);
     background: var(--bg-main);
     border: 1px solid var(--border-color);
     border-radius: 6px;
     font: inherit;
+    font-size: 14px;
   }
-  .search-filter-row { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 12px; }
+  .search-filter-row { display: flex; flex-wrap: wrap; gap: 6px 10px; font-size: 12px; }
   .search-filter-row label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
   #search-drawer input[type="checkbox"] { accent-color: var(--text-secondary); }
-  .search-variant-toggle { position: relative; display: grid !important; place-items: center; width: 42px; height: 32px; margin-inline-start: 2px; border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-secondary); background: var(--bg-hover); cursor: pointer; }
+  .search-variant-toggle { position: relative; display: grid !important; place-items: center; width: 36px; height: 28px; margin-inline-start: 2px; border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-secondary); background: var(--bg-hover); cursor: pointer; }
   .search-variant-toggle:has(input:checked) { color: var(--segment-active-text); background: var(--segment-active-bg); }
   .search-variant-toggle:has(input:focus-visible) { outline: 2px solid var(--text-primary); outline-offset: 2px; }
   .search-variant-toggle input { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
-  .search-variant-toggle svg { display: block; width: 34px; height: 22px; fill: currentColor; }
+  .search-variant-toggle svg { display: block; width: 30px; height: 20px; fill: currentColor; }
   .search-variant-toggle svg text { font-family: sans-serif; font-size: 10px; font-weight: 600; }
-  .search-filter-navigation { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .search-filter-group { display: grid; min-width: 0; gap: 8px; }
-  .search-result-navigation { display: grid; flex: 0 0 76px; width: 76px; height: 76px; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); grid-template-areas: "previous" "next"; gap: 0; }
+  .search-filter-navigation { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .search-filter-group { display: grid; min-width: 0; gap: 6px; }
+  .search-result-navigation { display: grid; flex: 0 0 56px; width: 56px; height: 56px; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); grid-template-areas: "previous" "next"; gap: 0; }
   #btn-search-previous { grid-area: previous; }
   #btn-search-next { grid-area: next; }
-  .search-result-navigation .action-btn { display: grid; place-items: center; justify-content: center; width: 100%; min-width: 0; height: 100%; padding: 8px; text-align: center; }
-  .search-result-navigation .action-btn svg { display: block; justify-self: center; align-self: center; margin: auto; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .search-result-navigation .action-btn { display: grid; place-items: center; justify-content: center; width: 100%; min-width: 0; height: 100%; min-height: 28px; padding: 4px; text-align: center; }
+  .search-result-navigation .action-btn svg { display: block; justify-self: center; align-self: center; margin: auto; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   html[data-writing-mode="vertical"] .search-result-navigation { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); grid-template-areas: "next previous"; }
   html[data-writing-mode="vertical"] #btn-search-previous svg,
   html[data-writing-mode="vertical"] #btn-search-next svg { transform: rotate(90deg); }
@@ -464,9 +471,11 @@ SOFTWARE.
     color: var(--text-primary);
   }
 
-  .settings-save-status { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin-inline-start: auto; color: var(--text-secondary); }
-  .settings-save-status[data-state="failed"], .settings-save-status[data-state="conflict"] { color: var(--accent-status); }
-  .save-status-icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .settings-save-status { display: inline-flex; flex: 0 0 36px; align-items: center; justify-content: center; width: 36px; height: 36px; color: var(--text-primary); }
+  .settings-save-status[data-state="saved"] { color: var(--save-status-success); }
+  .settings-save-status[data-state="failed"] { color: var(--save-status-error); }
+  .settings-save-status[data-state="conflict"] { color: var(--save-status-warning); }
+  .save-status-icon { display: block; flex: 0 0 24px; width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
   .settings-save-status[data-state="saving"] .save-status-icon { animation: save-status-spin 1s linear infinite; }
   @keyframes save-status-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .settings-save-status[data-state="saving"] .save-status-icon { animation: none; } }
@@ -969,8 +978,8 @@ SOFTWARE.
   <aside id="settings-drawer" class="drawer-panel" aria-label="設定" aria-hidden="true" tabindex="-1" inert data-i18n-aria="settings.title">
     <div class="drawer-header">
       <span class="drawer-title" data-i18n="settings.title">設定</span>
-      <span id="settings-save-status" class="settings-save-status" role="status" aria-live="polite"></span>
       <div class="drawer-header-actions">
+        <span id="settings-save-status" class="settings-save-status" role="status" aria-live="polite"></span>
         
         <button id="btn-theme-toggle" class="icon-btn" type="button" aria-label="テーマを切り替え" title="テーマを切り替え" data-i18n-aria="settings.theme">
           <svg viewBox="0 0 24 24" aria-hidden="true" id="theme-toggle-icon"><path d="M20.2 15.4A8.5 8.5 0 0 1 8.6 3.8 8.8 8.8 0 1 0 20.2 15.4Z" /></svg>
@@ -2663,7 +2672,7 @@ SOFTWARE.
       if (generation === settingsPersistence.generation && !settingsPersistence.conflicted) setSettingsSaveStatus('saved');
     } catch (error) {
       reportLocalStorageWrite(STORAGE_KEYS.SETTINGS, error);
-      setSettingsSaveStatus('failed');
+      if (generation === settingsPersistence.generation && !settingsPersistence.conflicted) setSettingsSaveStatus('failed');
     } finally {
       settingsPersistence.inFlight = false;
       if (settingsPersistence.pending !== null) settingsPersistence.timer = setTimeout(flushSettingsSave, 0);
@@ -4333,6 +4342,7 @@ SOFTWARE.
     themeDerivedColors = { ...THEME_PALETTES[activeViewerSettings.theme] || THEME_PALETTES.light };
 
     applySettings(activeViewerSettings);
+    setSettingsSaveStatus('saved');
     displayViewerContent(restoreInitialContent(isExportedDocument));
     updateResetButtonState();
     scheduleHtmlExportSizeUpdate();

@@ -273,6 +273,18 @@ test('設定・保存データ', 'ページ離脱時に保留中の設定を同�
 });
 
 test('設定・保存データ', '保存状態を意味の分かるアイコンと支援技術向けラベルで表示する', () => {
+  assert.match(html, /\.settings-save-status\s*\{[^}]*width:\s*36px[^}]*height:\s*36px[^}]*color:\s*var\(--text-primary\)/);
+  assert.match(html, /<div class="drawer-header-actions">\s*<span id="settings-save-status"[^>]*>\s*<\/span>/);
+  assert.match(html, /\.settings-save-status\[data-state="saved"\]\s*\{[^}]*color:\s*var\(--save-status-success\)/);
+  assert.match(html, /\.settings-save-status\[data-state="failed"\]\s*\{[^}]*color:\s*var\(--save-status-error\)/);
+  assert.match(html, /\.settings-save-status\[data-state="conflict"\]\s*\{[^}]*color:\s*var\(--save-status-warning\)/);
+  assert.match(html, /--save-status-success:\s*#18794e/);
+  assert.match(html, /--save-status-error:\s*#b42318/);
+  assert.match(html, /--save-status-warning:\s*#8a5a00/);
+  assert.match(html, /--save-status-success:\s*#75d69c/);
+  assert.match(html, /--save-status-error:\s*#ff7b72/);
+  assert.match(html, /--save-status-warning:\s*#f2cc60/);
+  assert.match(html, /\.save-status-icon\s*\{[^}]*width:\s*24px[^}]*height:\s*24px[^}]*stroke-width:\s*2\.4/);
   const status = { dataset: {}, innerHTML: '' };
   const { setSettingsSaveStatus } = load(['setSettingsSaveStatus'], {
     settingsSaveStatusEl: status,
@@ -289,6 +301,29 @@ test('設定・保存データ', '保存状態を意味の分かるアイコン�
   }
   setSettingsSaveStatus('');
   assert.equal(status.innerHTML, '');
+});
+
+test('設定・保存データ', '古い保存失敗は後から成立した別タブ競合状態を上書きしない', async () => {
+  const persistence = { timer: 0, pending: '{}', inFlight: false, generation: 1, conflicted: false };
+  const status = { dataset: {}, innerHTML: '' };
+  let rejectWrite;
+  const write = new Promise((_, reject) => { rejectWrite = reject; });
+  const { flushSettingsSave } = load(['flushSettingsSave'], {
+    settingsPersistence: persistence,
+    settingsSaveStatusEl: status,
+    STORAGE_KEYS: { SETTINGS: 'settings' },
+    SAVED_DATA_LOCK_NAME: 'saved-data',
+    navigator: { locks: { request: () => write } },
+    reportLocalStorageWrite() {}, confirmLocalStorageWrite() {}, scheduleHtmlExportSizeUpdate() {},
+    translate: key => key
+  });
+  const flushing = flushSettingsSave();
+  persistence.generation += 1;
+  persistence.conflicted = true;
+  status.dataset.state = 'conflict';
+  rejectWrite(new Error('stale write failed'));
+  await flushing;
+  assert.equal(status.dataset.state, 'conflict');
 });
 
 test('設定・保存データ', 'Web Locksの空き待ちは取得可能になるまで再試行し、操作を一度だけ実行する', async () => {
@@ -398,6 +433,8 @@ test('本文検索', '検索ボタン・検索語・結果一覧と対象フィ�
   assert.match(html, /id="search-include-body"[^>]*type="checkbox" checked/);
   assert.match(searchDrawer, /class="search-variant-toggle" title="英字大小・全半角を区別"[\s\S]*id="search-distinguish-variants"[^>]*aria-label="英字大小・全半角を区別"[\s\S]*<svg[^>]*aria-hidden="true"><text[^>]*>Aa<\/text><text[^>]*>ＡＡ<\/text>/);
   assert.match(html, /#search-drawer input\[type="checkbox"\]\s*\{[^}]*accent-color:\s*var\(--text-secondary\)/);
+  assert.match(html, /#search-query\s*\{[^}]*min-height:\s*34px[^}]*font-size:\s*14px[^}]*\}/);
+  assert.match(html, /\.search-variant-toggle\s*\{[^}]*width:\s*36px[^}]*height:\s*28px/);
   assert.match(html, /<ol id="search-results"[^>]*aria-label="検索結果一覧"/);
   assert.match(html, /id="btn-search-previous"[^>]*aria-label="前の検索結果へ"[^>]*>[\s\S]*?<svg[^>]*aria-hidden="true"/);
   assert.match(html, /id="btn-search-next"[^>]*aria-label="次の検索結果へ"[^>]*>[\s\S]*?<svg[^>]*aria-hidden="true"/);
@@ -406,7 +443,7 @@ test('本文検索', '検索ボタン・検索語・結果一覧と対象フィ�
   assert.match(html, /\.search-result-navigation \.action-btn svg\s*\{[^}]*justify-self:\s*center[^}]*align-self:\s*center/);
   assert.match(html, /\.search-filter-navigation\s*\{[^}]*display:\s*flex/);
   assert.match(searchDrawer, /class="search-filter-navigation"[\s\S]*class="search-filter-group"[\s\S]*id="search-result-status"[\s\S]*class="search-result-navigation"[^>]*aria-label="検索結果の移動"[\s\S]*id="btn-search-previous"[\s\S]*id="btn-search-next"/);
-  assert.match(html, /\.search-result-navigation\s*\{[^}]*width:\s*76px[^}]*height:\s*76px/);
+  assert.match(html, /\.search-result-navigation\s*\{[^}]*width:\s*56px[^}]*height:\s*56px/);
   assert.match(html, /\.search-result-navigation\s*\{[^}]*grid-template-areas:\s*"previous"\s*"next"/);
   assert.match(html, /html\[data-writing-mode="vertical"\] \.search-result-navigation\s*\{[^}]*grid-template-areas:\s*"next previous"/);
   assert.match(html, /html\[data-writing-mode="vertical"\] #btn-search-previous svg,[\s\n]*html\[data-writing-mode="vertical"\] #btn-search-next svg\s*\{[^}]*transform:\s*rotate\(90deg\)/);
