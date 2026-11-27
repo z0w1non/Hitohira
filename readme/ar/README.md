@@ -1,4 +1,4 @@
-[日本語](../../README.md) | [English](../en/README.md) | [Español](../es/README.md) | [简体中文](../zh-Hans/README.md) | [繁體中文](../zh-Hant/README.md) | [Français](../fr/README.md) | [Deutsch](../de/README.md) | [Português](../pt/README.md) | [한국어](../ko/README.md) | [Русский](../ru/README.md) | [हिन्दी](../hi/README.md) | [العربية](./README.md)
+[日本語](../../README.md) | [English](../en/README.md) | [Español](../es/README.md) | [简体中文](../zh-Hans/README.md) | [繁體中文](../zh-Hant/README.md) | [Français](../fr/README.md) | [Deutsch](../de/README.md) | [Português](../pt/README.md) | [한국어](../ko/README.md) | [Русский](../ru/README.md) | [हिन्दी](../hi/README.md) | العربية
 
 <p align="center">
   <img src="../../assets/hitohira-leaf.png" alt="أيقونة ورقة Hitohira" width="88">

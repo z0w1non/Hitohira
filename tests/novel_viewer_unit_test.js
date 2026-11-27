@@ -637,12 +637,13 @@ test('テスト基盤', '製品の実行時ネットワーク不要方針が仕�
 });
 test('公開用配布', 'GitHubのREADMEから公開HTMLを直接ダウンロードする', () => {
   assert.match(readme, /\[Hitohiraをダウンロード\]\(https:\/\/github\.com\/z0w1non\/Hitohira\/raw\/HEAD\/public\/hitohira-jp\.html\?download=1\)/);
-  assert.match(readme.split(/\r?\n/)[0], /\[日本語\]\(\.\/README\.md\).*\[العربية\]/);
+  assert.match(readme.split(/\r?\n/)[0], /^日本語 \| /);
+  assert.doesNotMatch(readme.split(/\r?\n/)[0], /\[日本語\]\(/);
   assert.match(readme, /小説を1つのHTMLファイルで読むための単体型ビューアです/);
   assert.doesNotMatch(readme, /A standalone novel viewer/);
-  assert.match(japaneseReadme.split(/\r?\n/)[0], /\[日本語\].*\[العربية\]/);
+  assert.match(japaneseReadme.split(/\r?\n/)[0], /^日本語 \| .*\[العربية\]/);
   assert.match(englishReadme.split(/\r?\n/)[0], /\[日本語\].*\[العربية\]/);
-  assert.match(japaneseReadme.split(/\r?\n/)[0], /\[日本語\]\(\.\.\/\.\.\/README\.md\)/);
+  assert.match(japaneseReadme.split(/\r?\n/)[0], /^日本語 \| /);
   assert.match(englishReadme.split(/\r?\n/)[0], /\[日本語\]\(\.\.\/\.\.\/README\.md\)/);
   assert.match(japaneseReadme, /public\/hitohira-jp\.html\?download=1/);
   assert.match(englishReadme, /public\/hitohira-en\.html\?download=1/);
@@ -651,12 +652,16 @@ test('公開用配布', 'GitHubのREADMEから公開HTMLを直接ダウンロー
   assert.match(englishReadme, /Screenshots/);
   assert.doesNotMatch(readme, /public\/hitohira\.html/);
   const locales = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'tools', 'locales.json'), 'utf8'));
+  const labels = { ja: '日本語', en: 'English', es: 'Español', 'zh-Hans': '简体中文', 'zh-Hant': '繁體中文', fr: 'Français', de: 'Deutsch', pt: 'Português', ko: '한국어', ru: 'Русский', hi: 'हिन्दी', ar: 'العربية' };
   for (const [locale, metadata] of Object.entries(locales)) {
     const publicFile = path.join(__dirname, '..', 'public', `hitohira-${metadata.suffix}.html`);
     assert.ok(fs.existsSync(publicFile), `${locale}の公開HTMLがありません`);
     const languageReadme = fs.readFileSync(path.join(__dirname, '..', 'readme', locale, 'README.md'), 'utf8');
     assert.ok(languageReadme.includes(`public/hitohira-${metadata.suffix}.html?download=1`), `${locale}のREADMEが別言語版へリンクしています`);
-    assert.match(languageReadme.split(/\r?\n/)[0], /\[日本語\]\(\.\.\/\.\.\/README\.md\)/, `${locale}のREADMEからルートの日本語READMEへ切り替えられません`);
+    const navigation = languageReadme.split(/\r?\n/)[0];
+    assert.ok(navigation.includes(labels[locale]), `${locale}のREADMEに現在言語がありません`);
+    assert.doesNotMatch(navigation, new RegExp(`\\[${labels[locale]}\\]\\(`), `${locale}のREADMEで現在言語がリンクになっています`);
+    assert.equal([...navigation.matchAll(/\[[^\]]+\]\([^)]+\)/g)].length, 11, `${locale}のREADMEで他言語の切替リンク数が不正です`);
   }
   assert.ok(spec.includes('日本語（同ファイル）と他11言語のREADMEへの切替リンク'));
 });

@@ -1,4 +1,4 @@
-[日本語](../../README.md) | [English](./README.md) | [Español](../es/README.md) | [简体中文](../zh-Hans/README.md) | [繁體中文](../zh-Hant/README.md) | [Français](../fr/README.md) | [Deutsch](../de/README.md) | [Português](../pt/README.md) | [한국어](../ko/README.md) | [Русский](../ru/README.md) | [हिन्दी](../hi/README.md) | [العربية](../ar/README.md)
+[日本語](../../README.md) | English | [Español](../es/README.md) | [简体中文](../zh-Hans/README.md) | [繁體中文](../zh-Hant/README.md) | [Français](../fr/README.md) | [Deutsch](../de/README.md) | [Português](../pt/README.md) | [한국어](../ko/README.md) | [Русский](../ru/README.md) | [हिन्दी](../hi/README.md) | [العربية](../ar/README.md)
 
 <p align="center">
   <img src="../../assets/hitohira-leaf.png" alt="Hitohira leaf icon" width="88">

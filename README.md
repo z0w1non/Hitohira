@@ -1,4 +1,4 @@
-[日本語](./README.md) | [English](./readme/en/README.md) | [Español](./readme/es/README.md) | [简体中文](./readme/zh-Hans/README.md) | [繁體中文](./readme/zh-Hant/README.md) | [Français](./readme/fr/README.md) | [Deutsch](./readme/de/README.md) | [Português](./readme/pt/README.md) | [한국어](./readme/ko/README.md) | [Русский](./readme/ru/README.md) | [हिन्दी](./readme/hi/README.md) | [العربية](./readme/ar/README.md)
+日本語 | [English](./readme/en/README.md) | [Español](./readme/es/README.md) | [简体中文](./readme/zh-Hans/README.md) | [繁體中文](./readme/zh-Hant/README.md) | [Français](./readme/fr/README.md) | [Deutsch](./readme/de/README.md) | [Português](./readme/pt/README.md) | [한국어](./readme/ko/README.md) | [Русский](./readme/ru/README.md) | [हिन्दी](./readme/hi/README.md) | [العربية](./readme/ar/README.md)
 
 
 <p align="center">
