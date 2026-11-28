@@ -19,6 +19,7 @@
 | 横書き | `settings.horizontal` | 横書き | Horizontal | Horizontal | 横排 | 橫排 | Horizontal | Waagerecht | Horizontal | 가로쓰기 | Горизонтально | क्षैतिज | أفقي |
 | 縦書き | `settings.vertical` | 縦書き | Vertical | Vertical | 竖排 | 直排 | Vertical | Senkrecht | Vertical | 세로쓰기 | Вертикально | ऊर्ध्वाधर | عمودي |
 | インポート | `settings.import` | インポート | Import | Importar | 导入 | 匯入 | Importer | Importieren | Importar | 가져오기 | Импорт | आयात | استيراد |
+| 本文の文字コード | `settings.textEncoding` | 本文の文字コード | Text encoding | Codificación del texto | 正文编码 | 正文編碼 | Encodage du texte | Textkodierung | Codificação do texto | 본문 인코딩 | Кодировка текста | पाठ एन्कोडिंग | ترميز النص |
 | エクスポート | `settings.export` | エクスポート | Export | Exportar | 导出 | 匯出 | Exporter | Exportieren | Exportar | 내보내기 | Экспорт | निर्यात | تصدير |
 | 読書進捗 | `settings.progress` | 読書進捗率を表示 | Show reading progress | Mostrar progreso de lectura | 显示阅读进度 | 顯示閱讀進度 | Afficher la progression de lecture | Lesefortschritt anzeigen | Mostrar progresso da leitura | 읽기 진행률 표시 | Показывать прогресс чтения | पढ़ने की प्रगति दिखाएँ | إظهار تقدم القراءة |
 | テキストファイル | `file.text` | テキスト | Text | Texto | 文本 | 文字 | Texte | Text | Texto | 텍스트 | Текст | पाठ | نص |

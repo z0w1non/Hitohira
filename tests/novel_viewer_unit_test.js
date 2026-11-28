@@ -1120,6 +1120,15 @@ test('インポート', 'UTF-8とBOM付きUTF-16を同じ本文へ復号する',
   }
 });
 
+test('インポート', '文字コードを明示選択し、自動判定では日本語のShift_JISを復号する', async () => {
+  const read = readText();
+  const shiftJis = Uint8Array.from([0x93, 0xfa, 0x96, 0x7b]);
+  assert.equal(await read(new Blob([shiftJis]), 'shift_jis'), '日本');
+  assert.equal(await read(new Blob([shiftJis]), 'auto', 'ja'), '日本');
+  assert.equal(await read(new Blob([Uint8Array.from([0x63, 0x61, 0x66, 0xe9])]), 'windows-1252'), 'café');
+  assert.match(html, /id="ctrl-text-encoding"/);
+});
+
 test('インポート', '復号できないバイトが続く場合は読み込み失敗を返す', async () => {
   await assert.rejects(readText()(new Blob([Uint8Array.of(255, 255, 255)])), /文字コード/);
 });
