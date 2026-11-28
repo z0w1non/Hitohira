@@ -3,9 +3,9 @@
 ## 保存
 
 - 設定は`localStorage`のキー`hitohira_settings`に保存する。
-- 設定変更はLocalStorageへの保存成功後に実行時状態と表示へ反映し、保存失敗時は直前の設定と表示を維持する。
+- 設定変更は画面へ即時反映し、最後の変更から250 ms後に最新設定をLocalStorageへ保存する。保存状態を表示し、失敗を通知する。別タブ競合が検出された場合は再読み込みまで保存変更を止める。
 - 本文は`hitohira_content`に保存する。
-- 読書位置は`novel_viewer_position:<documentId>`に保存し、設定・本文から分離する。背景メディアの移動量はこの読書位置レコードに含める。
+- 読書位置は`hitohira_position:<documentId>`に保存し、設定・本文から分離する。背景メディアの移動量はこの読書位置レコードに含める。
 - しおりは`hitohira_bookmarks:<documentId>`に文書単位で保存し、エクスポートHTMLへ埋め込まない。本文の置換・本文元ファイルの削除・初期化では対象文書のしおりも削除する。
 - 実行時メディアと読み込んだテキストは、IndexedDBデータベース`hitohira_media_db`のバージョン1、オブジェクトストア`background_media`、キー`current`と`current_text`を使用する。
 - LocalStorageとIndexedDBをまたぐ保存では、LocalStorageの未完了マーカーとIndexedDBの再実行記録を使う。通常版の起動時は未完了記録を復旧してから設定・本文を読む。復旧に失敗した状態で部分保存値を表示しない。

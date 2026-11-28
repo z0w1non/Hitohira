@@ -7,7 +7,7 @@ metadata:
 
 # ノベルビューア固有スキル
 
-`novel_viewer.html`、`docs/SPECIFICATION.md`、または関連アセットを変更するときに使用する。保存、エクスポート、入力処理、設定UIに関わる動作を変更する前に、[references/project-invariants.md](references/project-invariants.md)を読む。
+`hitohira.html`、`docs/SPECIFICATION.md`、または関連アセットを変更するときに使用する。保存、エクスポート、入力処理、設定UIに関わる動作を変更する前に、[references/project-invariants.md](references/project-invariants.md)を読む。`hitohira.html`を変更した場合は、公開用12言語HTMLを再生成する[公開ビルドスキル](../../../skills/novel-viewer-build/SKILL.md)にも従う。
 
 ## 作業手順
 
