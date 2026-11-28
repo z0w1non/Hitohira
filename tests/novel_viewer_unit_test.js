@@ -959,6 +959,7 @@ test('公開用ビルド', '各言語の公開HTMLを一辞書・対応本文・
     assert.ok(localized.includes(`--font-sans: ${metadata.fonts.sansStack};`), `${locale}のゴシック体フォントスタックがありません`);
     assert.match(localized, /<h1[^>]*>Hitohira<\/h1>/);
     assert.ok(localized.includes(dictionary[locale]['intro.summary']), `${locale}の既定本文が未翻訳です`);
+    assert.ok(localized.includes(dictionary[locale]['intro.dialogue']), `${locale}の既定本文に台詞引用符の説明がありません`);
     if (locale !== 'ja') assert.doesNotMatch(dictionary[locale]['intro.markdown'], /[｜《》]|漢字/, `${locale}の既定本文に日本語専用ルビ記法が含まれています`);
     assert.match(localized, new RegExp(`"settings\\.serif":"${metadata.fonts.serifLabel}"`));
     if (metadata.vertical) assert.match(localized, /id="ctrl-writing-mode"/);
@@ -1017,6 +1018,31 @@ test('本文表示・インポート', '引用・リスト・水平線・コー�
 
 test('本文表示・インポート', '台詞とルビを表示できる形へ変換する', () => {
   assert.equal(convert()('「漢字《かんじ》…」'), '<p><span class="dialogue">「<ruby>漢字<rt>かんじ</rt></ruby><span class="ellipsis">…</span>」</span></p>');
+});
+
+test('本文表示・インポート', '各言語圏の対応する引用符を台詞として扱い、非対応の引用符は変更しない', () => {
+  const convertText = convert();
+  const cases = [
+    ['“Hello.”', '<span class="dialogue">“Hello.”</span>'],
+    ['"Hello."', '<span class="dialogue">"Hello."</span>'],
+    ["'Hello.'", "<span class=\"dialogue\">'Hello.'</span>"],
+    ['‘Hello.’', '<span class="dialogue">‘Hello.’</span>'],
+    ['„Guten Tag.“', '<span class="dialogue">„Guten Tag.“</span>'],
+    ['«Bonjour !»', '<span class="dialogue">«Bonjour !»</span>'],
+    ['»Hallo!«', '<span class="dialogue">»Hallo!«</span>'],
+    ['‹Hello›', '<span class="dialogue">‹Hello›</span>'],
+    ['『こんにちは』', '<span class="dialogue">『こんにちは』</span>'],
+    ['〝こんにちは〟', '<span class="dialogue">〝こんにちは〟</span>'],
+    ["It's a story.", "It's a story."],
+    ['“閉じていない', '“閉じていない']
+  ];
+  for (const [input, expected] of cases) {
+    const actual = convertText(input);
+    assert.equal(actual, `<p>${expected}</p>`, `引用符入力 ${input}`);
+  }
+  assert.equal(convertText('“**Hello**”'), '<p><span class="dialogue">“<strong>Hello</strong>”</span></p>');
+  assert.equal(convert('en')('「こんにちは」'), '<p><span class="dialogue">「こんにちは」</span></p>');
+  assert.equal(convertText("It's a 'great' story."), '<p>It\'s a <span class="dialogue">\'great\'</span> story.</p>');
 });
 
 test('本文表示・インポート', 'HTMLルビ記法と日本語向け入力記法を安全な本文へ変換する', () => {
